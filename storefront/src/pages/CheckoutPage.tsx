@@ -1,0 +1,239 @@
+import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api, getAttributionMeta, money } from '../api/client';
+import { useCart } from '../cart/CartContext';
+import { useAuth } from '../auth/AuthContext';
+
+type DeliveryCity = {
+  nameAr: string;
+  mode: string;
+  deliveryType: string;
+  areas: string[];
+};
+
+type Quote = {
+  deliveryFee: number;
+  labelAr: string;
+  deliveryType: string;
+  mode: string;
+};
+
+export function CheckoutPage() {
+  const { items, subtotal, clear } = useCart();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [name, setName] = useState(user?.name || '');
+  const [phone, setPhone] = useState(user?.phone || '');
+  const [cities, setCities] = useState<DeliveryCity[]>([]);
+  const [city, setCity] = useState('طرابلس');
+  const [area, setArea] = useState('');
+  const [address, setAddress] = useState('');
+  const [landmark, setLandmark] = useState('');
+  const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('COD');
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [discount, setDiscount] = useState(0);
+  const [promoMsg, setPromoMsg] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api<{ cities: DeliveryCity[] }>('/store/delivery-options')
+      .then((d) => {
+        setCities(d.cities || []);
+        const first = d.cities?.[0];
+        if (first) {
+          setCity(first.nameAr);
+          setArea(first.areas[0] || '');
+        }
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const areas = useMemo(
+    () => cities.find((c) => c.nameAr === city)?.areas || [],
+    [cities, city],
+  );
+
+  useEffect(() => {
+    if (!city) return;
+    const qs = new URLSearchParams({ city });
+    if (area) qs.set('area', area);
+    api<Quote>(`/store/delivery-quote?${qs}`)
+      .then(setQuote)
+      .catch(() => undefined);
+  }, [city, area]);
+
+  if (!items.length) {
+    return <div className="container section empty">السلة فارغة</div>;
+  }
+
+  const deliveryFee = quote?.deliveryFee ?? 0;
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!area) {
+      setError('اختاري المنطقة لإظهار سعر التوصيل');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const order = await api<{
+        id: string;
+        orderNumber: string;
+        totalAmount: number;
+        status: string;
+        deliveryType: string;
+      }>('/store/checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          name,
+          phone,
+          city,
+          area,
+          address,
+          landmark,
+          notes,
+          paymentMethod,
+          attributionToken: getAttributionMeta().token,
+          pagePublicCode: getAttributionMeta().pagePublicCode,
+          agentPublicCode: getAttributionMeta().agentPublicCode,
+          promoCode: promoCode || undefined,
+          items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+        }),
+      });
+      clear();
+      navigate(`/order-success/${order.orderNumber}`, { state: order });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل تأكيد الطلب');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="container section">
+      <div className="section-head">
+        <h2>إتمام الطلب</h2>
+      </div>
+      <form className="panel form-grid two" onSubmit={onSubmit}>
+        <label>
+          الاسم
+          <input value={name} onChange={(e) => setName(e.target.value)} required />
+        </label>
+        <label>
+          الهاتف
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} required />
+        </label>
+        <label>
+          المدينة
+          <select
+            value={city}
+            onChange={(e) => {
+              const next = e.target.value;
+              setCity(next);
+              const found = cities.find((c) => c.nameAr === next);
+              setArea(found?.areas[0] || '');
+            }}
+            required
+          >
+            {cities.map((c) => (
+              <option key={c.nameAr} value={c.nameAr}>
+                {c.nameAr}
+                {c.deliveryType === 'INTERNAL' ? ' (مندوبينا)' : ' (شركة توصيل)'}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          المنطقة
+          <select value={area} onChange={(e) => setArea(e.target.value)} required>
+            <option value="">اختاري المنطقة</option>
+            {areas.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          العنوان
+          <input value={address} onChange={(e) => setAddress(e.target.value)} required />
+        </label>
+        <label>
+          أقرب نقطة دالة
+          <input value={landmark} onChange={(e) => setLandmark(e.target.value)} />
+        </label>
+        <label>
+          طريقة الدفع
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
+            <option value="COD">الدفع عند الاستلام</option>
+            <option value="CASH">نقداً</option>
+            <option value="BANK_TRANSFER">تحويل بنكي</option>
+          </select>
+        </label>
+        <label>
+          ملاحظات
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
+        </label>
+        <label>
+          كود الخصم
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={promoCode} onChange={(e) => setPromoCode(e.target.value)} />
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={async () => {
+                setPromoMsg('');
+                try {
+                  const res = await api<{ discount: number; code: string }>(
+                    '/store/promo/validate',
+                    {
+                      method: 'POST',
+                      body: JSON.stringify({ code: promoCode, subtotal }),
+                    },
+                  );
+                  setDiscount(res.discount);
+                  setPromoMsg(`تم تطبيق الخصم: ${money(res.discount)}`);
+                } catch (err) {
+                  setDiscount(0);
+                  setPromoMsg(err instanceof Error ? err.message : 'كود غير صالح');
+                }
+              }}
+            >
+              تطبيق
+            </button>
+          </div>
+          {promoMsg ? <div className="muted" style={{ fontSize: 13 }}>{promoMsg}</div> : null}
+        </label>
+        <div style={{ gridColumn: '1 / -1' }} className="panel">
+          <div>المجموع: {money(subtotal)}</div>
+          {discount ? <div>الخصم: −{money(discount)}</div> : null}
+          <div>
+            {quote?.labelAr || 'رسوم التوصيل'}:{' '}
+            {area ? money(deliveryFee) : '— اختاري المنطقة أولاً'}
+          </div>
+          <strong style={{ fontSize: 22, display: 'block', marginTop: 8 }}>
+            الإجمالي:{' '}
+            {area ? money(Math.max(0, subtotal - discount) + deliveryFee) : '—'}
+          </strong>
+        </div>
+        {error ? (
+          <div className="error" style={{ gridColumn: '1 / -1' }}>
+            {error}
+          </div>
+        ) : null}
+        <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10 }}>
+          <button className="btn" type="submit" disabled={busy || !area}>
+            {busy ? 'جارٍ التأكيد...' : 'تأكيد الطلب'}
+          </button>
+          <Link className="btn secondary" to="/cart">
+            رجوع للسلة
+          </Link>
+        </div>
+      </form>
+    </section>
+  );
+}

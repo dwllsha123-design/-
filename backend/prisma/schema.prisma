@@ -1,0 +1,770 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum UserStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum OrderSource {
+  FACEBOOK
+  WEBSITE
+  POS
+  WHOLESALE
+  OTHER
+}
+
+enum OrderStatus {
+  DRAFT
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  ASSIGNED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  PARTIALLY_RETURNED
+  RETURNED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+  COD
+  OTHER
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  REFUNDED
+}
+
+enum DeliveryType {
+  INTERNAL
+  EXTERNAL
+  PICKUP
+  STORE
+}
+
+enum DeliveryStatus {
+  PENDING
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
+enum InventoryMovementType {
+  IN
+  OUT
+  SALE
+  ADJUST
+  RESERVE
+  RELEASE
+  RETURN
+  TRANSFER
+  DAMAGE
+}
+
+enum FacebookPageStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PageMemberRole {
+  MANAGER
+  ADMIN
+  AGENT
+}
+
+enum ReservationStatus {
+  ACTIVE
+  RELEASED
+  CONSUMED
+  EXPIRED
+  CANCELLED
+}
+
+// ─── Auth / RBAC ─────────────────────────────────────────
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String?    @unique
+  phone        String?    @unique
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  locale       String     @default("ar")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  roles              UserRole[]
+  facebookPages      FacebookPageEmployee[]
+  managedPages       FacebookPage[]         @relation("PageManager")
+  salesOrders        Order[]                @relation("SalesAgentOrders")
+  cashierOrders      Order[]                @relation("CashierOrders")
+  warehouseMovements InventoryMovement[]    @relation("MovementBy")
+  assignedDeliveries Delivery[]             @relation("DeliveryAgent")
+  reservations       StockReservation[]     @relation("AgentReservations")
+  commissions        CommissionEntry[]      @relation("AgentCommissions")
+  notifications      Notification[]         @relation("UserNotifications")
+  auditLogs          AuditLog[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameAr      String
+  nameEn      String?
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  nameAr      String
+  nameEn      String?
+  module      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+
+  @@index([module])
+  @@map("permissions")
+}
+
+model UserRole {
+  userId     String
+  roleId     String
+  assignedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ─── Settings ────────────────────────────────────────────
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  group     String   @default("general")
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+  @@map("settings")
+}
+
+// ─── Catalog ─────────────────────────────────────────────
+
+model Category {
+  id        String   @id @default(cuid())
+  parentId  String?
+  nameAr    String
+  nameEn    String?
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  sku            String?       @unique
+  nameAr         String
+  nameEn         String?
+  description    String?
+  categoryId     String?
+  brand          String?
+  status         ProductStatus @default(DRAFT)
+  costPrice      Decimal?
+  wholesalePrice Decimal?
+  retailPrice    Decimal
+  /// @deprecated use retailPrice
+  basePrice      Decimal       @default(0)
+  currency       String        @default("LYD")
+  isTrackStock   Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  category Category?        @relation(fields: [categoryId], references: [id])
+  variants ProductVariant[]
+  images   ProductImage[]
+
+  @@index([status])
+  @@index([categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id             String   @id @default(cuid())
+  productId      String
+  sku            String   @unique
+  barcode        String?  @unique
+  nameAr         String?
+  nameEn         String?
+  color          String?
+  size           String?
+  costPrice      Decimal?
+  wholesalePrice Decimal?
+  retailPrice    Decimal  @default(0)
+  /// @deprecated use retailPrice
+  price          Decimal  @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product      Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItems   StockItem[]
+  orderItems   OrderItem[]
+  reservations StockReservation[]
+
+  @@index([productId])
+  @@index([barcode])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id        String   @id @default(cuid())
+  productId String
+  url       String
+  alt       String?
+  sortOrder Int      @default(0)
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+// ─── Warehouse / Inventory ───────────────────────────────
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  nameAr    String
+  nameEn    String?
+  address   String?
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stockItems StockItem[]
+  movements  InventoryMovement[]
+  orders     Order[]
+
+  @@map("warehouses")
+}
+
+model StockItem {
+  id               String   @id @default(cuid())
+  warehouseId      String
+  variantId        String
+  quantityOnHand   Int      @default(0)
+  quantityReserved Int      @default(0)
+  reorderLevel     Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  variant   ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@unique([warehouseId, variantId])
+  @@map("stock_items")
+}
+
+model InventoryMovement {
+  id          String                @id @default(cuid())
+  warehouseId String
+  variantId   String
+  type        InventoryMovementType
+  quantity    Int
+  reference   String?
+  orderId     String?
+  reason      String?
+  notes       String?
+  createdById String?
+  createdAt   DateTime              @default(now())
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  createdBy User?     @relation("MovementBy", fields: [createdById], references: [id])
+
+  @@index([warehouseId, variantId])
+  @@index([orderId])
+  @@index([createdAt])
+  @@map("inventory_movements")
+}
+
+model StockReservation {
+  id            String            @id @default(cuid())
+  warehouseId   String
+  variantId     String
+  quantity      Int
+  status        ReservationStatus @default(ACTIVE)
+  agentUserId   String
+  pageId        String?
+  orderId       String?
+  expiresAt     DateTime?
+  notes         String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  releasedAt    DateTime?
+  consumedAt    DateTime?
+
+  variant ProductVariant @relation(fields: [variantId], references: [id])
+  agent   User           @relation("AgentReservations", fields: [agentUserId], references: [id])
+  page    FacebookPage?  @relation(fields: [pageId], references: [id])
+
+  @@index([status, variantId])
+  @@index([agentUserId])
+  @@map("stock_reservations")
+}
+
+// ─── Customers ───────────────────────────────────────────
+
+model Customer {
+  id               String    @id @default(cuid())
+  name             String
+  phone            String    @unique
+  whatsapp         String?
+  city             String?
+  area             String?
+  address          String?
+  landmark         String?
+  notes            String?
+  totalOrders      Int       @default(0)
+  totalPurchases   Decimal   @default(0)
+  deliveredOrders  Int       @default(0)
+  cancelledOrders  Int       @default(0)
+  returnsCount     Int       @default(0)
+  lastOrderAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  orders Order[]
+
+  @@index([city])
+  @@index([name])
+  @@map("customers")
+}
+
+// ─── Facebook Pages ──────────────────────────────────────
+
+model FacebookPage {
+  id         String             @id @default(cuid())
+  name       String
+  /// Public numeric Page ID used in referral links, e.g. 1025
+  publicCode Int                @unique
+  pageId     String?            @unique
+  status     FacebookPageStatus @default(ACTIVE)
+  managerId  String?
+  notes      String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  manager       User?                   @relation("PageManager", fields: [managerId], references: [id])
+  employees     FacebookPageEmployee[]
+  orders        Order[]
+  reservations  StockReservation[]
+  referralVisits ReferralVisit[]
+
+  @@map("facebook_pages")
+}
+
+model FacebookPageEmployee {
+  pageId     String
+  userId     String
+  role       PageMemberRole @default(AGENT)
+  /// Public numeric Agent ID used in referral links, e.g. 2050
+  agentCode  Int?           @unique
+  assignedAt DateTime       @default(now())
+
+  page FacebookPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([pageId, userId])
+  @@index([agentCode])
+  @@map("facebook_page_employees")
+}
+
+model ReferralVisit {
+  id           String   @id @default(cuid())
+  pageId       String
+  pageCode     Int
+  agentUserId  String?
+  agentCode    Int?
+  attributionToken String @unique
+  ip           String?
+  userAgent    String?
+  landingPath  String?
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  page FacebookPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@index([pageCode, agentCode])
+  @@index([attributionToken])
+  @@map("referral_visits")
+}
+
+model CodeSequence {
+  key     String @id
+  counter Int    @default(1000)
+
+  @@map("code_sequences")
+}
+
+// ─── Orders ──────────────────────────────────────────────
+
+model OrderSequence {
+  year    Int @id
+  counter Int @default(0)
+
+  @@map("order_sequences")
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  orderNumber     String        @unique
+  /// Scannable barcode, e.g. ORD-10025
+  orderBarcode    String        @unique
+  source          OrderSource
+  status          OrderStatus   @default(NEW)
+  paymentMethod   PaymentMethod @default(COD)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  deliveryType    DeliveryType  @default(INTERNAL)
+
+  customerId      String?
+  salesAgentId    String?
+  cashierId       String?
+  facebookPageId  String?
+  warehouseId     String?
+
+  /// Attribution snapshot
+  pagePublicCode  Int?
+  agentPublicCode Int?
+  referralVisitId String?
+  attributionSource String?
+
+  subtotal        Decimal
+  discountAmount  Decimal       @default(0)
+  promoCodeId     String?
+  promoCode       String?
+  deliveryFee     Decimal       @default(0)
+  taxAmount       Decimal       @default(0)
+  totalAmount     Decimal
+  currency        String        @default("LYD")
+
+  shippingName    String?
+  shippingPhone   String?
+  city            String?
+  area            String?
+  address         String?
+  landmark        String?
+  notes           String?
+
+  stockDeductedAt   DateTime?
+  returnedToStockAt DateTime?
+
+  confirmedAt     DateTime?
+  deliveredAt     DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  salesAgent    User?          @relation("SalesAgentOrders", fields: [salesAgentId], references: [id])
+  cashier       User?          @relation("CashierOrders", fields: [cashierId], references: [id])
+  facebookPage  FacebookPage?  @relation(fields: [facebookPageId], references: [id])
+  warehouse     Warehouse?     @relation(fields: [warehouseId], references: [id])
+  referralVisit ReferralVisit? @relation(fields: [referralVisitId], references: [id])
+  items         OrderItem[]
+  deliveries    Delivery[]
+  invoice       Invoice?
+  commissions   CommissionEntry[]
+
+  @@index([status])
+  @@index([source])
+  @@index([createdAt])
+  @@index([customerId])
+  @@index([salesAgentId])
+  @@index([facebookPageId])
+  @@index([orderBarcode])
+  @@index([pagePublicCode, agentPublicCode])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  variantId   String?
+  productName String
+  variantName String?
+  sku         String?
+  quantity    Int
+  unitPrice   Decimal
+  discount    Decimal @default(0)
+  lineTotal   Decimal
+
+  order   Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ─── Delivery ────────────────────────────────────────────
+
+model DeliveryCompany {
+  id        String   @id @default(cuid())
+  nameAr    String
+  nameEn    String?
+  phone     String?
+  apiUrl    String?
+  apiKey    String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries Delivery[]
+
+  @@map("delivery_companies")
+}
+
+model Delivery {
+  id                String         @id @default(cuid())
+  orderId           String
+  type              DeliveryType
+  status            DeliveryStatus @default(PENDING)
+  agentId           String?
+  companyId         String?
+  trackingNumber    String?
+  shippingSlipNo    String?        @unique
+  /// Accuratess shipment id / code
+  externalRef       String?
+  trackingUrl       String?
+  lastSyncedAt      DateTime?
+  fee               Decimal        @default(0)
+  notes             String?
+  assignedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  order   Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  agent   User?            @relation("DeliveryAgent", fields: [agentId], references: [id])
+  company DeliveryCompany? @relation(fields: [companyId], references: [id])
+
+  @@index([status])
+  @@index([orderId])
+  @@index([externalRef])
+  @@map("deliveries")
+}
+
+// ─── Invoices ────────────────────────────────────────────
+
+model Invoice {
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  orderId       String   @unique
+  amount        Decimal 
+  currency      String   @default("LYD")
+  issuedAt      DateTime @default(now())
+  notes         String?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("invoices")
+}
+
+// ─── Audit ───────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  meta       Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── Commissions ─────────────────────────────────────────
+
+enum CommissionStatus {
+  PENDING
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+model CommissionRule {
+  id           String   @id @default(cuid())
+  nameAr       String
+  /// PERCENT of order total, or FIXED amount
+  type         String   @default("PERCENT")
+  ratePercent  Decimal? @default(0)
+  fixedAmount  Decimal? @default(0)
+  pageId       String?
+  agentUserId  String?
+  source       String?  /// FACEBOOK | POS | WEBSITE | ALL
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([pageId, agentUserId, isActive])
+  @@map("commission_rules")
+}
+
+model CommissionEntry {
+  id            String           @id @default(cuid())
+  orderId       String
+  agentUserId   String
+  pageId        String?
+  ruleId        String?
+  orderTotal    Decimal
+  ratePercent   Decimal          @default(0)
+  amount        Decimal
+  currency      String           @default("LYD")
+  status        CommissionStatus @default(PENDING)
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  paidAt        DateTime?
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  agent User  @relation("AgentCommissions", fields: [agentUserId], references: [id])
+
+  @@unique([orderId, agentUserId])
+  @@index([agentUserId, status])
+  @@index([createdAt])
+  @@map("commission_entries")
+}
+
+// ─── Marketing ───────────────────────────────────────────
+
+enum PromoDiscountType {
+  PERCENT
+  FIXED
+}
+
+model PromoCode {
+  id         String            @id @default(cuid())
+  code       String            @unique
+  nameAr     String?
+  type       PromoDiscountType @default(PERCENT)
+  value      Decimal
+  minOrder   Decimal           @default(0)
+  maxUses    Int?
+  usedCount  Int               @default(0)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  active     Boolean           @default(true)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@index([active, startsAt, endsAt])
+  @@map("promo_codes")
+}
+
+model Banner {
+  id         String    @id @default(cuid())
+  title      String
+  subtitle   String?
+  imageUrl   String?
+  linkUrl    String?
+  sortOrder  Int       @default(0)
+  active     Boolean   @default(true)
+  startsAt   DateTime?
+  endsAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([active, sortOrder])
+  @@map("banners")
+}
+
+// ─── Notifications ───────────────────────────────────────
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  titleAr    String
+  bodyAr     String?
+  type       String
+  entityType String?
+  entityId   String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
