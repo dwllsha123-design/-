@@ -12,6 +12,7 @@ import {
   AssignMemberDto,
   CreateFacebookPageDto,
   UpdateFacebookPageDto,
+  UpsertShippingAccountDto,
 } from './dto/facebook-page.dto';
 
 @Injectable()
@@ -58,6 +59,21 @@ export class FacebookPagesService {
             user: { select: { id: true, name: true, phone: true, email: true } },
           },
         },
+        shippingAccount: {
+          select: {
+            id: true,
+            label: true,
+            pageIdentifier: true,
+            endpoint: true,
+            senderZoneId: true,
+            senderSubzoneId: true,
+            isActive: true,
+            notes: true,
+            updatedAt: true,
+            /** لا نُرجع التوكن كاملاً في القائمة */
+            apiToken: true,
+          },
+        },
         _count: { select: { orders: true } },
       },
       orderBy: { publicCode: 'asc' },
@@ -65,9 +81,19 @@ export class FacebookPagesService {
 
     return pages.map((p) => {
       const links = this.linksFor(p.publicCode);
+      const token = p.shippingAccount?.apiToken;
       return {
         ...p,
         ...links,
+        shippingAccount: p.shippingAccount
+          ? {
+              ...p.shippingAccount,
+              apiToken: token
+                ? `${token.slice(0, 4)}…${token.slice(-4)}`
+                : null,
+              hasToken: Boolean(token),
+            }
+          : null,
         members: {
           manager: p.manager,
           admins: p.employees.filter((e) => e.role === 'ADMIN'),
@@ -204,5 +230,63 @@ export class FacebookPagesService {
       await this.assignMember(id, { userId, role: PageMemberRole.AGENT });
     }
     return this.findOne(id);
+  }
+
+  async remove(id: string) {
+    const page = await this.prisma.facebookPage.findUnique({
+      where: { id },
+      include: { _count: { select: { orders: true } } },
+    });
+    if (!page) throw new NotFoundException('الصفحة غير موجودة');
+    if (page._count.orders > 0) {
+      throw new BadRequestException(
+        'لا يمكن حذف صفحة لها طلبات مسجّلة. أوقفيها حتى لا تُستخدم في روابط جديدة.',
+      );
+    }
+    await this.prisma.facebookPage.delete({ where: { id } });
+    return { ok: true };
+  }
+
+  async upsertShippingAccount(pageId: string, dto: UpsertShippingAccountDto) {
+    const page = await this.prisma.facebookPage.findUnique({ where: { id: pageId } });
+    if (!page) throw new NotFoundException('الصفحة غير موجودة');
+
+    const saved = await this.prisma.externalShippingAccount.upsert({
+      where: { facebookPageId: pageId },
+      create: {
+        facebookPageId: pageId,
+        label: dto.label || page.name,
+        pageIdentifier: dto.pageIdentifier || page.name,
+        apiToken: dto.apiToken,
+        endpoint: dto.endpoint,
+        senderZoneId: dto.senderZoneId,
+        senderSubzoneId: dto.senderSubzoneId,
+        isActive: dto.isActive ?? true,
+        notes: dto.notes,
+      },
+      update: {
+        label: dto.label || page.name,
+        pageIdentifier: dto.pageIdentifier || page.name,
+        apiToken: dto.apiToken,
+        endpoint: dto.endpoint,
+        senderZoneId: dto.senderZoneId,
+        senderSubzoneId: dto.senderSubzoneId,
+        isActive: dto.isActive ?? true,
+        notes: dto.notes,
+      },
+    });
+
+    return {
+      ...saved,
+      apiToken: `${saved.apiToken.slice(0, 4)}…${saved.apiToken.slice(-4)}`,
+      hasToken: true,
+    };
+  }
+
+  async removeShippingAccount(pageId: string) {
+    await this.prisma.externalShippingAccount.deleteMany({
+      where: { facebookPageId: pageId },
+    });
+    return { ok: true };
   }
 }

@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, money, statusLabel } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useFavorites } from '../cart/CartContext';
 import { ProductGrid } from '../components/ProductCard';
 import type { StoreProduct } from '../api/client';
+import { categoryImage } from '../data/catalog';
+import { useStoreCategories } from '../hooks/useStoreCategories';
 
 export function AccountPage() {
   const { user, loading } = useAuth();
@@ -99,7 +101,6 @@ export function AccountOrderPage() {
       <div className="panel" style={{ display: 'grid', gap: 10 }}>
         <h2>{order.orderNumber}</h2>
         <div>الحالة: {statusLabel[order.status] || order.status}</div>
-        <div>التوصيل: {order.deliveryType}</div>
         <div>الإجمالي: {money(order.totalAmount)}</div>
         <Link className="btn" to={`/track?order=${order.orderNumber}&phone=${user.phone || ''}`}>تتبع الطلب</Link>
       </div>
@@ -109,16 +110,40 @@ export function AccountOrderPage() {
 
 export function OrderSuccessPage() {
   const { orderNumber } = useParams();
+  const location = useLocation();
+  const state = (location.state || {}) as {
+    totalAmount?: number;
+    subtotal?: number;
+    deliveryFee?: number;
+    discountAmount?: number;
+    status?: string;
+  };
+
   return (
     <section className="container section">
       <div className="panel" style={{ textAlign: 'center', display: 'grid', gap: 12 }}>
         <h2>تم تأكيد طلبكِ</h2>
         <p>رقم الطلب</p>
         <strong style={{ fontSize: 28 }}>{orderNumber}</strong>
-        <p className="muted">سنتواصل معكِ قريباً لتأكيد التوصيل داخل/خارج طرابلس.</p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <Link className="btn" to={`/track?order=${orderNumber}`}>تتبع الطلب</Link>
-          <Link className="btn secondary" to="/products">متابعة التسوق</Link>
+        {state.status ? (
+          <div className="muted">الحالة: {statusLabel[state.status] || state.status}</div>
+        ) : null}
+        {state.totalAmount != null ? (
+          <div className="order-success-totals">
+            {state.subtotal != null ? <div>المجموع: {money(state.subtotal)}</div> : null}
+            {state.discountAmount ? <div>الخصم: −{money(state.discountAmount)}</div> : null}
+            {state.deliveryFee != null ? <div>التوصيل: {money(state.deliveryFee)}</div> : null}
+            <strong>الإجمالي: {money(state.totalAmount)}</strong>
+          </div>
+        ) : null}
+        <p className="muted">سنتواصل معكِ قريباً لتأكيد التوصيل.</p>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Link className="btn" to={`/track?order=${orderNumber}`}>
+            تتبع الطلب
+          </Link>
+          <Link className="btn secondary" to="/products">
+            متابعة التسوق
+          </Link>
         </div>
       </div>
     </section>
@@ -160,7 +185,6 @@ export function TrackPage() {
           <strong>{data.orderNumber}</strong>
           <div>الحالة: {statusLabel[data.status] || data.status}</div>
           <div>الإجمالي: {money(data.totalAmount)}</div>
-          <div>التوصيل: {data.deliveryType}</div>
           <div className="timeline">
             {(data.timeline || []).map((t: any) => (
               <div key={t.status} className={`timeline-item ${t.current ? 'current' : t.reached ? 'done' : ''}`}>
@@ -192,10 +216,11 @@ export function WishlistPage() {
   );
 }
 
-const POPULAR = ['لانجري', 'أرواب', 'باروكات', 'عروض', 'ملابس داخلية'];
 const RECENT_KEY = 'store_recent_searches';
 
 export function SearchPage() {
+  const navigate = useNavigate();
+  const categories = useStoreCategories();
   const [q, setQ] = useState('');
   const [recent, setRecent] = useState<string[]>(() => {
     try {
@@ -215,7 +240,7 @@ export function SearchPage() {
     if (!t) return;
     const next = [t, ...recent.filter((x) => x !== t)].slice(0, 8);
     persist(next);
-    window.location.href = `/search?q=${encodeURIComponent(t)}`;
+    navigate(`/search?q=${encodeURIComponent(t)}`);
   }
 
   return (
@@ -286,29 +311,41 @@ export function SearchPage() {
         البحث الشائع
       </h3>
       <div className="tag-cloud">
-        {POPULAR.map((t) => (
-          <button key={t} type="button" onClick={() => go(t)}>
-            {t}
+        {categories.map((c) => (
+          <button key={c.id} type="button" onClick={() => go(c.nameAr)}>
+            {c.nameAr}
           </button>
         ))}
+        <button type="button" onClick={() => go('عروض')}>
+          عروض
+        </button>
       </div>
 
       <h3 className="label-md" style={{ margin: '28px 0 12px' }}>
         اكتشفي المجموعات
       </h3>
       <div className="cat-grid">
-        {[
-          { to: '/category/lingerie', title: 'لانجري', image: 'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=600&q=80' },
-          { to: '/category/robes', title: 'أرواب', image: 'https://images.unsplash.com/photo-1583292650898-7d22cd27ca6f?auto=format&fit=crop&w=600&q=80' },
-          { to: '/new', title: 'وصلنا حديثاً', image: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80' },
-          { to: '/offers', title: 'العروض', image: 'https://images.unsplash.com/photo-1607083206869-4c7672e72a8a?auto=format&fit=crop&w=600&q=80' },
-        ].map((c) => (
-          <Link key={c.to} to={c.to} className="cat-tile">
-            <div className="bg" style={{ backgroundImage: `url('${c.image}')` }} />
+        {categories.slice(0, 4).map((c) => (
+          <Link key={c.id} to={`/category/${c.slug}`} className="cat-tile">
+            <div className="bg" style={{ backgroundImage: `url('${categoryImage(c.slug)}')` }} />
             <div className="veil" />
-            <h3>{c.title}</h3>
+            <h3>{c.nameAr}</h3>
           </Link>
         ))}
+        <Link to="/new" className="cat-tile">
+          <div
+            className="bg"
+            style={{
+              backgroundImage:
+                "url('https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80')",
+            }}
+          />
+          <div className="veil" />
+          <h3>وصلنا حديثاً</h3>
+        </Link>
+        <Link to="/offers" className="cat-tile offer-tile">
+          <h3>العروض</h3>
+        </Link>
       </div>
     </section>
   );

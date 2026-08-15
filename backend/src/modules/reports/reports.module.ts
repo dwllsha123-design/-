@@ -97,6 +97,33 @@ export class ReportsService {
       (i) => i.quantityOnHand <= i.reorderLevel,
     );
 
+    const remainingUnits = stockItems.reduce(
+      (s, i) => s + Math.max(0, i.quantityOnHand),
+      0,
+    );
+
+    const onlineSources = ['WEBSITE', 'FACEBOOK'] as const;
+    const posSources = ['POS', 'WHOLESALE'] as const;
+    const sumSource = (
+      rows: Array<{ source: string; count: number; total: number }>,
+      sources: readonly string[],
+    ) =>
+      rows
+        .filter((r) => sources.includes(r.source))
+        .reduce(
+          (acc, r) => ({
+            orders: acc.orders + r.count,
+            sales: acc.sales + r.total,
+          }),
+          { orders: 0, sales: 0 },
+        );
+
+    const bySourceMapped = bySource.map((row) => ({
+      source: row.source,
+      count: row._count._all,
+      total: Number(row._sum.totalAmount || 0),
+    }));
+
     return {
       currency: 'LYD',
       today,
@@ -104,14 +131,16 @@ export class ReportsService {
       month,
       pendingOrders,
       lowStock: lowStockItems.length,
+      remainingStockUnits: remainingUnits,
+      stockSkus: stockItems.length,
       pendingMarketers,
       customersCount,
       productsCount,
-      bySource: bySource.map((row) => ({
-        source: row.source,
-        count: row._count._all,
-        total: Number(row._sum.totalAmount || 0),
-      })),
+      channelSales: {
+        online: sumSource(bySourceMapped, onlineSources),
+        pos: sumSource(bySourceMapped, posSources),
+      },
+      bySource: bySourceMapped,
       recentOrders,
     };
   }

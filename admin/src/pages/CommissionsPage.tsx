@@ -69,7 +69,7 @@ export function CommissionsPage() {
     <div className="stack">
       <div className="page-title">
         <h1>العمولات</h1>
-        <p>عمولات مندوبي المبيعات حسب القواعد المعتمدة</p>
+        <p>من هنا ترين عمولة كل مسوّق أو مندوب حسب الطلبات المرتبطة به أو بصفحته، وفق القواعد المعتمدة في النظام.</p>
       </div>
 
       <form className="panel form-grid two" onSubmit={createRule}>

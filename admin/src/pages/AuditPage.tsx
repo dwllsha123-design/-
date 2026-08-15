@@ -27,7 +27,7 @@ export function AuditPage() {
     <div className="stack">
       <div className="page-title">
         <h1>سجل النشاط</h1>
-        <p>من عدّل المنتجات أو أضاف الطلبات ومتى</p>
+        <p>من هنا تعرفين ماذا حدث داخل النظام: من أضاف منتجاً أو طلباً أو عدّل بيانات، ومتى تم ذلك، للمراجعة عند أي اختلاف.</p>
       </div>
       {error ? <div className="error">{error}</div> : null}
       <div className="panel toolbar">

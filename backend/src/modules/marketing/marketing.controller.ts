@@ -1,5 +1,18 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { join } from 'path';
 import {
   MarketingService,
 } from './marketing.service';
@@ -78,6 +91,32 @@ export class MarketingController {
     @Body() dto: UpdateBannerDto,
   ) {
     return this.marketing.updateBanner(user, id, dto);
+  }
+
+  @Post('marketing/banners/:id/image')
+  @ApiBearerAuth()
+  @RequirePermissions(PERMISSIONS.MARKETING_MANAGE)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: join(process.cwd(), 'uploads', 'banners'),
+      limits: { fileSize: 6 * 1024 * 1024 },
+    }),
+  )
+  uploadBannerImage(
+    @Param('id') id: string,
+    @UploadedFile()
+    file?: { filename: string; originalname: string; mimetype: string },
+  ) {
+    if (!file?.filename) throw new BadRequestException('اختاري صورة للرفع');
+    return this.marketing.uploadBannerImage(id, file);
+  }
+
+  @Delete('marketing/banners/:id')
+  @ApiBearerAuth()
+  @RequirePermissions(PERMISSIONS.MARKETING_MANAGE)
+  deleteBanner(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.marketing.deleteBanner(user, id);
   }
 
   @Public()

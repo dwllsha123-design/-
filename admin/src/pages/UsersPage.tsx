@@ -147,7 +147,7 @@ export function UsersPage() {
     <div className="stack">
       <div className="page-title">
         <h1>المستخدمون والصلاحيات</h1>
-        <p>عرض صلاحيات كل مسمى وظيفي وإدارة الموظفين</p>
+        <p>من هنا تضيفين الموظفات وتحددين صلاحيات كل وظيفة: من يدخل نقطة البيع، من يعدّل المنتجات، ومن يعتمد المسوّقين الجدد.</p>
       </div>
       {error ? <div className="error">{error}</div> : null}
 

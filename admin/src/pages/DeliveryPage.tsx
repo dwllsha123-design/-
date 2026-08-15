@@ -22,6 +22,11 @@ type Delivery = {
     totalAmount: string | number;
     deliveryType?: string;
     deliveryFee?: string | number;
+    pagePublicCode?: number | null;
+    fulfillmentType?: string | null;
+    localStatus?: string | null;
+    facebookPage?: { id: string; name: string; publicCode: number } | null;
+    courier?: { id: string; name: string; phone?: string | null } | null;
   };
   agent?: { name: string; phone?: string } | null;
   company?: { nameAr: string } | null;
@@ -35,19 +40,32 @@ type PendingOrder = {
   city?: string;
   area?: string;
   deliveryType: string;
+  fulfillmentType?: string | null;
+  localStatus?: string | null;
   deliveryFee: string | number;
   totalAmount: string | number;
   status: string;
+  facebookPage?: { id: string; name: string; publicCode: number } | null;
+  courierId?: string | null;
 };
 
+type Page = { id: string; name: string; publicCode: number };
+
 type Agent = { id: string; name: string; phone?: string };
+type Courier = { id: string; name: string; phone?: string | null; isActive: boolean };
 
 export function DeliveryPage() {
   const [rows, setRows] = useState<Delivery[]>([]);
   const [pending, setPending] = useState<PendingOrder[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [couriers, setCouriers] = useState<Courier[]>([]);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [pageId, setPageId] = useState('');
   const [orderId, setOrderId] = useState('');
   const [agentId, setAgentId] = useState('');
+  const [courierId, setCourierId] = useState('');
+  const [courierName, setCourierName] = useState('');
+  const [courierPhone, setCourierPhone] = useState('');
   const [fee, setFee] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [error, setError] = useState('');
@@ -59,20 +77,25 @@ export function DeliveryPage() {
   );
 
   async function load() {
-    const [d, p, a] = await Promise.all([
-      api<Delivery[]>('/delivery'),
+    const qs = pageId ? `?facebookPageId=${encodeURIComponent(pageId)}` : '';
+    const [d, p, a, pg, c] = await Promise.all([
+      api<Delivery[]>(`/delivery${qs}`),
       api<PendingOrder[]>('/delivery/pending-orders'),
-      api<Agent[]>('/delivery/agents'),
+      api<Agent[]>('/delivery/agents').catch(() => [] as Agent[]),
+      api<Page[]>('/facebook-pages').catch(() => [] as Page[]),
+      api<Courier[]>('/couriers').catch(() => [] as Courier[]),
     ]);
     setRows(d);
     setPending(p);
     setAgents(a);
+    setPages(pg);
+    setCouriers(c);
     if (!orderId && p[0]) setOrderId(p[0].id);
   }
 
   useEffect(() => {
     load().catch((e) => setError(e.message));
-  }, []);
+  }, [pageId]);
 
   useEffect(() => {
     if (!selected) {
@@ -100,22 +123,61 @@ export function DeliveryPage() {
     setError('');
     setMsg('');
     try {
-      const isInternal = selected.deliveryType === 'INTERNAL';
-      await api('/delivery/assign', {
-        method: 'POST',
-        body: JSON.stringify({
-          orderId,
-          type: selected.deliveryType,
-          agentId: isInternal ? agentId : undefined,
-          fee: fee ?? Number(selected.deliveryFee || 0),
-        }),
-      });
-      setMsg(isInternal ? 'تم تعيين المندوب بنجاح' : 'تم إرسال الطلب لـ Accuratess');
+      const isInternal =
+        selected.deliveryType === 'INTERNAL' || selected.fulfillmentType === 'INTERNAL';
+      if (isInternal && courierId) {
+        await api(`/orders/${orderId}/assign-courier`, {
+          method: 'POST',
+          body: JSON.stringify({ courierId }),
+        });
+        setMsg('تم إسناد الطلب للمندوب المحلي');
+      } else {
+        await api('/delivery/assign', {
+          method: 'POST',
+          body: JSON.stringify({
+            orderId,
+            type: selected.deliveryType,
+            agentId: isInternal ? agentId || undefined : undefined,
+            fee: fee ?? Number(selected.deliveryFee || 0),
+          }),
+        });
+        setMsg(isInternal ? 'تم تعيين المندوب بنجاح' : 'تم إرسال الطلب لـ Accuratess');
+      }
       setAgentId('');
+      setCourierId('');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل التعيين');
     }
+  }
+
+  async function setLocalStatus(orderIdForStatus: string, localStatus: string) {
+    setError('');
+    setMsg('');
+    try {
+      await api(`/orders/${orderIdForStatus}/local-status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ localStatus }),
+      });
+      setMsg(
+        localStatus === 'DELIVERED'
+          ? 'تم التسليم'
+          : localStatus === 'FAILED'
+            ? 'تعذر التسليم'
+            : 'تم تحديث حالة التوصيل الداخلي',
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل تحديث الحالة');
+    }
+  }
+
+  async function toggleCourier(c: Courier) {
+    await api(`/couriers/${c.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ isActive: !c.isActive }),
+    });
+    await load();
   }
 
   async function syncOne(id: string) {
@@ -145,12 +207,58 @@ export function DeliveryPage() {
     }
   }
 
+  async function addCourier(e: FormEvent) {
+    e.preventDefault();
+    if (!courierName.trim()) return;
+    setError('');
+    try {
+      await api('/couriers', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: courierName.trim(),
+          phone: courierPhone.trim() || undefined,
+        }),
+      });
+      setCourierName('');
+      setCourierPhone('');
+      setMsg('تم إضافة المندوب');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل إضافة المندوب');
+    }
+  }
+
+  async function fulfillSelected() {
+    if (!orderId) return;
+    setError('');
+    setMsg('');
+    try {
+      const res = await api<{ fulfillmentType: string; error?: string | null }>(
+        `/orders/${orderId}/fulfill`,
+        { method: 'POST', body: '{}' },
+      );
+      setMsg(
+        res.fulfillmentType === 'INTERNAL'
+          ? 'تم توجيه الطلب للتوصيل الداخلي'
+          : res.error
+            ? `شحن خارجي مع تنبيه: ${res.error}`
+            : 'تم إرسال الطلب لشركة المعيار بحساب الصفحة',
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'فشل التوجيه');
+    }
+  }
+
   return (
     <div className="stack">
       <div className="topbar">
         <div className="page-title">
           <h1>التوصيل</h1>
-          <p>طباعة بوليصات Accuratess وتتبع الحالة من اللوحة</p>
+          <p>
+            من هنا تنظّمين شحن الطلبات: طرابلس عبر المناديب المحليين، وخارجها عبر المعيار بمفتاح
+            حساب الصفحة تلقائياً. يمكن أيضاً إعادة توجيه طلب يدوياً وطباعة البوليصات.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn secondary" type="button" onClick={() => syncAll()}>
@@ -158,10 +266,14 @@ export function DeliveryPage() {
           </button>
           <Link
             className="btn"
-            to={`/delivery/print?ids=${(selectedIds.length ? selectedIds : rows.map((r) => r.id)).join(',')}`}
+            to={
+              pageId
+                ? `/delivery/print?pageId=${pageId}`
+                : `/delivery/print?ids=${(selectedIds.length ? selectedIds : rows.map((r) => r.id)).join(',')}`
+            }
             target="_blank"
           >
-            طباعة {selectedIds.length ? `المحددة (${selectedIds.length})` : 'الكل'}
+            طباعة {pageId ? 'بوليصات الصفحة' : selectedIds.length ? `المحددة (${selectedIds.length})` : 'الكل'}
           </Link>
         </div>
       </div>
@@ -195,48 +307,127 @@ export function DeliveryPage() {
           الطلب
           <select value={orderId} onChange={(e) => setOrderId(e.target.value)} required>
             <option value="">اختر طلب</option>
-            {pending.map((o) => (
+            {pending
+              .filter((o) => !pageId || o.facebookPage?.id === pageId)
+              .map((o) => (
               <option key={o.id} value={o.id}>
-                {o.orderNumber} — {o.city || '—'} ({o.deliveryType === 'INTERNAL' ? 'داخلي' : 'خارجي'})
+                {o.orderNumber} — {o.facebookPage?.name || 'بدون صفحة'} — {o.city || '—'} (
+                {o.deliveryType === 'INTERNAL' ? 'داخلي' : 'خارجي'})
               </option>
             ))}
           </select>
         </label>
-        {selected?.deliveryType === 'INTERNAL' ? (
-          <label>
-            المندوب
-            <select value={agentId} onChange={(e) => setAgentId(e.target.value)} required>
-              <option value="">اختر مندوب</option>
-              {agents.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                  {a.phone ? ` — ${a.phone}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+        {selected?.deliveryType === 'INTERNAL' || selected?.fulfillmentType === 'INTERNAL' ? (
+          <>
+            <label>
+              المندوب المحلي
+              <select value={courierId} onChange={(e) => setCourierId(e.target.value)}>
+                <option value="">اختر مندوب من قائمة المناديب</option>
+                {couriers
+                  .filter((c) => c.isActive)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.phone ? ` — ${c.phone}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            {!couriers.filter((c) => c.isActive).length ? (
+              <label>
+                مندوب نظام (احتياطي)
+                <select value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+                  <option value="">اختر مندوب مستخدم</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                      {a.phone ? ` — ${a.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+          </>
         ) : (
           <label>
             شركة التوصيل
-            <input value="Accuratess — يُرسل مع مرجع الصفحة" disabled />
+            <input value="المعيار — بمفتاح حساب الصفحة تلقائياً" disabled />
           </label>
         )}
         <label>
           رسوم التوصيل
           <input type="number" value={fee ?? ''} onChange={(e) => setFee(Number(e.target.value))} />
         </label>
-        <div style={{ display: 'flex', alignItems: 'end' }}>
+        <div style={{ display: 'flex', alignItems: 'end', gap: 8, flexWrap: 'wrap' }}>
           <button className="btn" type="submit" disabled={!orderId}>
-            {selected?.deliveryType === 'INTERNAL' ? 'تعيين مندوب' : 'إرسال لشركة التوصيل'}
+            {selected?.deliveryType === 'INTERNAL' || selected?.fulfillmentType === 'INTERNAL'
+              ? 'إسناد لمندوب محلي'
+              : 'إرسال لشركة التوصيل'}
+          </button>
+          <button className="btn secondary" type="button" disabled={!orderId} onClick={() => void fulfillSelected()}>
+            توجيه ذكي (طرابلس/خارجي)
           </button>
         </div>
         {msg ? <div className="success" style={{ gridColumn: '1 / -1' }}>{msg}</div> : null}
         {error ? <div className="error" style={{ gridColumn: '1 / -1' }}>{error}</div> : null}
       </form>
 
+      <form className="panel form-grid two" onSubmit={addCourier}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <strong>مناديب التوصيل المحلي (طرابلس)</strong>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            المناديب النشطون: {couriers.filter((c) => c.isActive).length}
+          </p>
+          {couriers.length ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+              {couriers.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`btn sm ${c.isActive ? 'secondary' : 'ghost'}`}
+                  onClick={() => void toggleCourier(c)}
+                  title={c.isActive ? 'إيقاف' : 'تفعيل'}
+                >
+                  {c.name}
+                  {c.phone ? ` · ${c.phone}` : ''}
+                  {c.isActive ? '' : ' (متوقف)'}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">لا يوجد مناديب بعد — أضيفي الأول أدناه</p>
+          )}
+        </div>
+        <label>
+          اسم المندوب
+          <input value={courierName} onChange={(e) => setCourierName(e.target.value)} required />
+        </label>
+        <label>
+          الهاتف
+          <input value={courierPhone} onChange={(e) => setCourierPhone(e.target.value)} />
+        </label>
+        <div style={{ display: 'flex', alignItems: 'end' }}>
+          <button className="btn secondary" type="submit">
+            إضافة مندوب
+          </button>
+        </div>
+      </form>
+
       <div className="panel table-wrap">
         <div className="toolbar">
           <strong>سجلات التوصيل</strong>
+          <select
+            value={pageId}
+            onChange={(e) => setPageId(e.target.value)}
+            style={{ minWidth: 200, height: 36, padding: '0 10px' }}
+          >
+            <option value="">كل الصفحات</option>
+            {pages.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} (#{p.publicCode})
+              </option>
+            ))}
+          </select>
         </div>
         <table>
           <thead>
@@ -244,9 +435,11 @@ export function DeliveryPage() {
               <th></th>
               <th>البوليصة</th>
               <th>الطلب</th>
+              <th>الصفحة</th>
               <th>النوع</th>
+              <th>المندوب / الحالة المحلية</th>
               <th>العميل</th>
-              <th>تتبع Accuratess</th>
+              <th>تتبع المعيار</th>
               <th>الحالة</th>
               <th></th>
             </tr>
@@ -263,7 +456,41 @@ export function DeliveryPage() {
                 </td>
                 <td>{d.shippingSlipNo || '—'}</td>
                 <td>{d.order.orderNumber}</td>
+                <td>
+                  {d.order.facebookPage?.name || '—'}
+                  {d.order.facebookPage?.publicCode || d.order.pagePublicCode ? (
+                    <div style={{ fontSize: 12, color: 'var(--on-surface-variant)' }}>
+                      #{d.order.facebookPage?.publicCode || d.order.pagePublicCode}
+                    </div>
+                  ) : null}
+                </td>
                 <td>{d.type === 'INTERNAL' ? 'داخلي' : 'خارجي'}</td>
+                <td>
+                  {d.type === 'INTERNAL' ? (
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <div style={{ fontSize: 13 }}>
+                        {d.order.courier?.name || d.agent?.name || 'بدون مندوب'}
+                      </div>
+                      <select
+                        value={d.order.localStatus || ''}
+                        onChange={(e) => {
+                          if (e.target.value) void setLocalStatus(d.order.id, e.target.value);
+                        }}
+                        style={{ height: 32, fontSize: 12 }}
+                      >
+                        <option value="">الحالة المحلية</option>
+                        <option value="PENDING">قيد الانتظار</option>
+                        <option value="IN_WAREHOUSE">داخل المخزن</option>
+                        <option value="OUT_FOR_DELIVERY">قيد التوصيل</option>
+                        <option value="DELIVERED">تم التسليم</option>
+                        <option value="FAILED">تعذر التسليم</option>
+                        <option value="RETURNED">مرتجع</option>
+                      </select>
+                    </div>
+                  ) : (
+                    '—'
+                  )}
+                </td>
                 <td>
                   {d.order.shippingName}
                   <div style={{ color: 'var(--on-surface-variant)', fontSize: 13 }}>
@@ -299,7 +526,7 @@ export function DeliveryPage() {
             ))}
             {!rows.length ? (
               <tr>
-                <td colSpan={8} className="empty">
+                <td colSpan={10} className="empty">
                   لا توجد سجلات توصيل
                 </td>
               </tr>

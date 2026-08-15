@@ -6,6 +6,7 @@ import {
   AssignMemberDto,
   CreateFacebookPageDto,
   UpdateFacebookPageDto,
+  UpsertShippingAccountDto,
 } from './dto/facebook-page.dto';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
@@ -60,5 +61,26 @@ export class FacebookPagesController {
   @RequirePermissions(PERMISSIONS.FACEBOOK_PAGES_MANAGE)
   assignEmployees(@Param('id') id: string, @Body() dto: AssignEmployeesDto) {
     return this.facebookPagesService.assignEmployees(id, dto.userIds);
+  }
+
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.FACEBOOK_PAGES_MANAGE)
+  remove(@Param('id') id: string) {
+    return this.facebookPagesService.remove(id);
+  }
+
+  @Put(':id/shipping-account')
+  @RequirePermissions(PERMISSIONS.FACEBOOK_PAGES_MANAGE)
+  upsertShippingAccount(
+    @Param('id') id: string,
+    @Body() dto: UpsertShippingAccountDto,
+  ) {
+    return this.facebookPagesService.upsertShippingAccount(id, dto);
+  }
+
+  @Delete(':id/shipping-account')
+  @RequirePermissions(PERMISSIONS.FACEBOOK_PAGES_MANAGE)
+  removeShippingAccount(@Param('id') id: string) {
+    return this.facebookPagesService.removeShippingAccount(id);
   }
 }

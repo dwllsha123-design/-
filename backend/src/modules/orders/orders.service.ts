@@ -12,6 +12,8 @@ import { CentralInventoryService } from '../inventory/services/central-inventory
 import { canViewCostPrices, retailOf } from '../../common/pricing/price-policy';
 import { CommissionsService } from '../commissions/commissions.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OrderFulfillmentService } from '../delivery/order-fulfillment.service';
+import { findDeliveryCity } from '../../common/delivery/delivery-zones';
 
 @Injectable()
 export class OrdersService {
@@ -20,6 +22,7 @@ export class OrdersService {
     private readonly inventory: CentralInventoryService,
     private readonly commissions: CommissionsService,
     private readonly notifications: NotificationsService,
+    private readonly fulfillment: OrderFulfillmentService,
   ) {}
 
   private async nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -88,6 +91,11 @@ export class OrdersService {
         salesAgent: { select: { id: true, name: true } },
         facebookPage: true,
         items: true,
+        deliveries: {
+          select: { id: true, shippingSlipNo: true, status: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -255,6 +263,22 @@ export class OrdersService {
           status: 'NEW',
           paymentMethod: dto.paymentMethod ?? 'COD',
           deliveryType: dto.deliveryType ?? 'INTERNAL',
+          fulfillmentType: (() => {
+            const t =
+              dto.deliveryType ||
+              (findDeliveryCity(dto.city || undefined).mode === 'OWN_AGENTS'
+                ? 'INTERNAL'
+                : 'EXTERNAL');
+            return t === 'INTERNAL' ? 'INTERNAL' : 'EXTERNAL';
+          })(),
+          localStatus: (() => {
+            const t =
+              dto.deliveryType ||
+              (findDeliveryCity(dto.city || undefined).mode === 'OWN_AGENTS'
+                ? 'INTERNAL'
+                : 'EXTERNAL');
+            return t === 'INTERNAL' ? 'PENDING' : undefined;
+          })(),
           customerId,
           salesAgentId,
           cashierId: dto.source === 'POS' ? user.id : undefined,
@@ -264,6 +288,7 @@ export class OrdersService {
           agentPublicCode,
           referralVisitId,
           attributionSource,
+          pageSource: undefined,
           subtotal,
           discountAmount,
           deliveryFee,
@@ -358,21 +383,23 @@ export class OrdersService {
 
       return created;
     }).then(async (created) => {
-      await this.notifications.notifyRole('super_admin', {
+      if (created.facebookPage?.name) {
+        await this.prisma.order.update({
+          where: { id: created.id },
+          data: { pageSource: created.facebookPage.name },
+        });
+      }
+      try {
+        await this.fulfillment.routeOrder(created.id);
+      } catch {
+        /* لا نُفشل إنشاء الطلب إذا تعثر الشحن */
+      }
+      await this.notifications.notifyOrderStakeholders(created, {
         titleAr: `طلب جديد ${created.orderNumber}`,
         bodyAr: `مصدر: ${created.source} — المبلغ: ${created.totalAmount} د.ل`,
         type: 'ORDER_CREATED',
-        entityType: 'Order',
-        entityId: created.id,
       });
-      await this.notifications.notifyRole('admin', {
-        titleAr: `طلب جديد ${created.orderNumber}`,
-        bodyAr: `مصدر: ${created.source} — المبلغ: ${created.totalAmount} د.ل`,
-        type: 'ORDER_CREATED',
-        entityType: 'Order',
-        entityId: created.id,
-      });
-      return created;
+      return this.findOne(created.id);
     });
   }
 
@@ -472,6 +499,26 @@ export class OrdersService {
 
     if (dto.status === 'CONFIRMED') {
       await this.notifyLowStockForOrder(updated.id);
+      if (order.status !== 'CONFIRMED') {
+        await this.notifications.notifyOrderStakeholders(updated, {
+          titleAr: 'تم تأكيد الطلب',
+          type: 'ORDER_CONFIRMED',
+        });
+      }
+    }
+
+    if (dto.status === 'DELIVERED' && order.status !== 'DELIVERED') {
+      await this.notifications.notifyOrderStakeholders(updated, {
+        titleAr: 'تم التسليم',
+        type: 'ORDER_DELIVERED',
+      });
+    }
+
+    if (dto.status === 'CANCELLED' && order.status !== 'CANCELLED') {
+      await this.notifications.notifyOrderStakeholders(updated, {
+        titleAr: 'تم إلغاء الطلب',
+        type: 'ORDER_CANCELLED',
+      });
     }
 
     return updated;
@@ -502,14 +549,7 @@ export class OrdersService {
             ? `نفاد مخزون: ${stock.variant.product.nameAr}`
             : `قرب نفاد: ${stock.variant.product.nameAr}`;
         const body = `المتبقي ${stock.quantityOnHand} (حد التنبيه ${stock.reorderLevel})`;
-        await this.notifications.notifyRole('super_admin', {
-          titleAr: title,
-          bodyAr: body,
-          type: 'LOW_STOCK',
-          entityType: 'Product',
-          entityId: stock.variant.productId,
-        });
-        await this.notifications.notifyRole('admin', {
+        await this.notifications.notifyAdmins({
           titleAr: title,
           bodyAr: body,
           type: 'LOW_STOCK',

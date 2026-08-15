@@ -1,0 +1,273 @@
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { FulfillmentType, LocalOrderStatus, Prisma } from '@prisma/client';
+import { PrismaService } from '../../prisma/prisma.service';
+import { findDeliveryCity } from '../../common/delivery/delivery-zones';
+import { AccuratessService } from './accuratess.service';
+
+@Injectable()
+export class OrderFulfillmentService {
+  private readonly logger = new Logger(OrderFulfillmentService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accuratess: AccuratessService,
+  ) {}
+
+  normalizeCity(city?: string | null) {
+    return (city || '').trim().replace(/\s+/g, ' ');
+  }
+
+  resolveFulfillmentType(city?: string | null): FulfillmentType {
+    const zone = findDeliveryCity(this.normalizeCity(city) || undefined);
+    return zone.mode === 'OWN_AGENTS' ? 'INTERNAL' : 'EXTERNAL';
+  }
+
+  async resolvePageAccount(order: {
+    facebookPageId?: string | null;
+    pagePublicCode?: number | null;
+    pageSource?: string | null;
+  }) {
+    if (order.facebookPageId) {
+      const byPage = await this.prisma.externalShippingAccount.findFirst({
+        where: { facebookPageId: order.facebookPageId, isActive: true },
+      });
+      if (byPage) return byPage;
+    }
+
+    if (order.pagePublicCode != null) {
+      const page = await this.prisma.facebookPage.findUnique({
+        where: { publicCode: order.pagePublicCode },
+        include: { shippingAccount: true },
+      });
+      if (page?.shippingAccount?.isActive) return page.shippingAccount;
+    }
+
+    const identifier = (order.pageSource || '').trim();
+    if (identifier) {
+      const byId = await this.prisma.externalShippingAccount.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            { pageIdentifier: identifier },
+            { label: identifier },
+            { facebookPage: { name: identifier } },
+          ],
+        },
+      });
+      if (byId) return byId;
+    }
+
+    return null;
+  }
+
+  /**
+   * توجيه ذكي عند إنشاء/اعتماد الطلب:
+   * طرابلس → internal + local_status
+   * خارجها → external + Accuratess بمفتاح صفحة الطلب
+   */
+  async routeOrder(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { facebookPage: true },
+    });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+
+    const pageSource =
+      order.pageSource ||
+      order.facebookPage?.name ||
+      (order.pagePublicCode != null ? `صفحة #${order.pagePublicCode}` : null) ||
+      order.attributionSource ||
+      null;
+
+    const fulfillmentType = this.resolveFulfillmentType(order.city);
+
+    if (fulfillmentType === 'INTERNAL') {
+      const updated = await this.prisma.order.update({
+        where: { id: orderId },
+        data: {
+          fulfillmentType: 'INTERNAL',
+          deliveryType: 'INTERNAL',
+          localStatus: (order.localStatus || 'PENDING') as LocalOrderStatus,
+          pageSource,
+          courierId: order.courierId,
+          fulfillmentError: null,
+        },
+        include: { facebookPage: true, courier: true },
+      });
+      return {
+        fulfillmentType: 'INTERNAL' as const,
+        localStatus: updated.localStatus,
+        order: updated,
+        external: null,
+      };
+    }
+
+    // EXTERNAL
+    const account = await this.resolvePageAccount({
+      facebookPageId: order.facebookPageId,
+      pagePublicCode: order.pagePublicCode,
+      pageSource,
+    });
+
+    const senderName =
+      account?.label ||
+      order.facebookPage?.name ||
+      pageSource ||
+      'دار الأنوثة';
+
+    let externalResult: Record<string, unknown> = {};
+    let tracking: string | null = null;
+    let labelUrl: string | null = null;
+    let payloadJson: string | null = null;
+    let fulfillmentError: string | null = null;
+
+    try {
+      const shipped = await this.accuratess.saveShipment({
+        orderNumber: order.orderNumber,
+        senderName,
+        recipientName: order.shippingName || 'عميل',
+        recipientPhone: order.shippingPhone || '',
+        recipientAddress: order.address || order.area || order.city || 'ليبيا',
+        city: order.city,
+        area: order.area,
+        notes: order.notes,
+        price: Number(order.totalAmount || 0),
+        deliveryFees: Number(order.deliveryFee || 0),
+        sourcePage: senderName,
+        sourcePageCode: order.pagePublicCode,
+        account: account
+          ? {
+              apiToken: account.apiToken,
+              endpoint: account.endpoint,
+              senderZoneId: account.senderZoneId,
+              senderSubzoneId: account.senderSubzoneId,
+            }
+          : null,
+      });
+
+      externalResult = shipped as Record<string, unknown>;
+      payloadJson = JSON.stringify(shipped);
+
+      if ('skipped' in shipped && shipped.skipped) {
+        fulfillmentError = String(shipped.reason || 'تم تخطي Accuratess');
+      } else if ('ok' in shipped && shipped.ok && shipped.shipment) {
+        const s = shipped.shipment as {
+          code?: string;
+          id?: string;
+          trackingUrl?: string;
+        };
+        tracking = String(s.code || s.id || '') || null;
+        labelUrl = s.trackingUrl ? String(s.trackingUrl) : null;
+      } else if ('error' in shipped && shipped.error) {
+        fulfillmentError = String(shipped.error);
+      }
+    } catch (err) {
+      fulfillmentError =
+        err instanceof Error ? err.message : 'فشل الاتصال بشركة المعيار';
+      this.logger.error(`Fulfillment Accuratess error for ${order.orderNumber}: ${fulfillmentError}`);
+      payloadJson = JSON.stringify({ error: fulfillmentError });
+    }
+
+    const updated = await this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        fulfillmentType: 'EXTERNAL',
+        deliveryType: 'EXTERNAL',
+        localStatus: null,
+        pageSource,
+        externalTrackingNumber: tracking || order.externalTrackingNumber,
+        shippingLabelUrl: labelUrl || order.shippingLabelUrl,
+        externalResponsePayload: payloadJson,
+        fulfillmentError,
+      },
+      include: { facebookPage: true, courier: true },
+    });
+
+    // إنشاء/تحديث سجل Delivery للتوافق مع لوحة التوصيل
+    const existing = await this.prisma.delivery.findFirst({
+      where: { orderId },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!existing) {
+      const year = new Date().getFullYear();
+      const count = await this.prisma.delivery.count({
+        where: { shippingSlipNo: { startsWith: `SLIP-${year}-` } },
+      });
+      const shippingSlipNo = `SLIP-${year}-${String(count + 1).padStart(6, '0')}`;
+      await this.prisma.delivery.create({
+        data: {
+          orderId,
+          type: 'EXTERNAL',
+          status: tracking ? 'ASSIGNED' : 'PENDING',
+          fee: order.deliveryFee,
+          shippingSlipNo,
+          trackingNumber: tracking || undefined,
+          trackingUrl: labelUrl || undefined,
+          externalRef: tracking || undefined,
+          notes: fulfillmentError
+            ? `يحتاج إرسال يدوي: ${fulfillmentError}`
+            : `Accuratess page=${senderName}`,
+        },
+      });
+    } else if (tracking) {
+      await this.prisma.delivery.update({
+        where: { id: existing.id },
+        data: {
+          type: 'EXTERNAL',
+          status: 'ASSIGNED',
+          trackingNumber: tracking,
+          trackingUrl: labelUrl || existing.trackingUrl,
+          externalRef: tracking,
+        },
+      });
+    }
+
+    return {
+      fulfillmentType: 'EXTERNAL' as const,
+      order: updated,
+      accountUsed: account
+        ? { id: account.id, label: account.label, pageIdentifier: account.pageIdentifier }
+        : null,
+      external: externalResult,
+      error: fulfillmentError,
+    };
+  }
+
+  async assignCourier(orderId: string, courierId: string) {
+    const courier = await this.prisma.courier.findUnique({ where: { id: courierId } });
+    if (!courier || !courier.isActive) {
+      throw new NotFoundException('المندوب غير موجود أو غير نشط');
+    }
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: {
+        courierId,
+        fulfillmentType: 'INTERNAL',
+        deliveryType: 'INTERNAL',
+        localStatus: 'OUT_FOR_DELIVERY',
+        status: 'OUT_FOR_DELIVERY',
+      },
+      include: { courier: true, facebookPage: true },
+    });
+  }
+
+  async updateLocalStatus(orderId: string, localStatus: LocalOrderStatus) {
+    const data: Prisma.OrderUpdateInput = { localStatus };
+    if (localStatus === 'OUT_FOR_DELIVERY') data.status = 'OUT_FOR_DELIVERY';
+    if (localStatus === 'IN_WAREHOUSE') data.status = 'READY';
+    if (localStatus === 'DELIVERED') {
+      data.status = 'DELIVERED';
+      data.deliveredAt = new Date();
+      data.paymentStatus = 'PAID';
+    }
+    if (localStatus === 'FAILED') data.status = 'READY';
+    if (localStatus === 'RETURNED') data.status = 'RETURNED';
+    if (localStatus === 'PENDING') data.status = 'CONFIRMED';
+
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data,
+      include: { courier: true, facebookPage: true },
+    });
+  }
+}

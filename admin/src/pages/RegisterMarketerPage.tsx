@@ -46,7 +46,7 @@ export function RegisterMarketerPage() {
       <form className="login-card stack" onSubmit={onSubmit}>
         <div className="page-title">
           <h1>تسجيل مسوق — طرابلس</h1>
-          <p>بعد التسجيل تنتظر موافقة الإدارة عبر الإشعارات</p>
+          <p>من هنا يسجّل المسوّق الجديد بياناته. بعد الإرسال يبقى الحساب معلّقاً حتى توافق الإدارة من الإشعارات في لوحة التحكم.</p>
         </div>
         <label>
           الاسم الكامل

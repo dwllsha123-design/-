@@ -10,6 +10,7 @@ type Slip = {
   fee: string | number;
   type: string;
   status: string;
+  senderName?: string | null;
   sourcePage?: string | number | null;
   agent?: { name: string; phone?: string } | null;
   company?: { nameAr: string } | null;
@@ -29,6 +30,7 @@ type Slip = {
       lineTotal: string | number;
     }>;
     facebookPage?: { name: string; publicCode: number } | null;
+    pagePublicCode?: number | null;
   };
 };
 
@@ -38,24 +40,33 @@ export function DeliveryPrintPage() {
     () => (params.get('ids') || '').split(',').map((s) => s.trim()).filter(Boolean),
     [params],
   );
+  const orderIds = useMemo(
+    () => (params.get('orderIds') || '').split(',').map((s) => s.trim()).filter(Boolean),
+    [params],
+  );
+  const pageId = params.get('pageId') || '';
   const [slips, setSlips] = useState<Slip[]>([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!ids.length) {
+    const body: { ids?: string[]; orderIds?: string[]; facebookPageId?: string } = {};
+    if (pageId) body.facebookPageId = pageId;
+    else if (orderIds.length) body.orderIds = orderIds;
+    else if (ids.length) body.ids = ids;
+    else {
       setError('لا توجد بوليصات للطباعة');
       return;
     }
     api<{ slips: Slip[] }>('/delivery/slips/bulk', {
       method: 'POST',
-      body: JSON.stringify({ ids }),
+      body: JSON.stringify(body),
     })
       .then((d) => {
         setSlips(d.slips || []);
         setTimeout(() => window.print(), 400);
       })
       .catch((e) => setError(e.message));
-  }, [ids.join(',')]);
+  }, [ids.join(','), orderIds.join(','), pageId]);
 
   if (error) return <div className="login-page">{error}</div>;
   if (!slips.length) return <div className="login-page">جارٍ تحميل البوليصات...</div>;
@@ -70,6 +81,10 @@ export function DeliveryPrintPage() {
         .print-root { padding: 24px; font-family: "IBM Plex Sans Arabic", Tahoma, sans-serif; color: #1a1a1a; }
         .slip { border: 1px solid #ccc; padding: 20px; margin-bottom: 24px; }
         .slip h1 { margin: 0 0 8px; font-size: 22px; }
+        .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+        .party { border: 1px solid #bbb; padding: 12px 14px; border-radius: 6px; }
+        .party h2 { margin: 0 0 8px; font-size: 13px; color: #666; font-weight: 600; }
+        .party .name { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
         .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 16px 0; font-size: 14px; }
         table { width: 100%; border-collapse: collapse; margin-top: 12px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: right; font-size: 13px; }
@@ -88,19 +103,30 @@ export function DeliveryPrintPage() {
           <h1>بوليصة شحن — دار الأنوثة</h1>
           <div>رقم البوليصة: {s.shippingSlipNo || '—'}</div>
           <div>رقم الطلب: {s.order.orderNumber}</div>
+          <div className="parties">
+            <div className="party">
+              <h2>الراسل</h2>
+              <div className="name">
+                {s.senderName ||
+                  s.order.facebookPage?.name ||
+                  (typeof s.sourcePage === 'string' ? s.sourcePage : null) ||
+                  'دار الأنوثة'}
+              </div>
+              <div>
+                رمز الصفحة:{' '}
+                {s.order.facebookPage?.publicCode || s.order.pagePublicCode || '—'}
+              </div>
+            </div>
+            <div className="party">
+              <h2>المستلم</h2>
+              <div className="name">{s.order.shippingName || '—'}</div>
+              <div>الهاتف: {s.order.shippingPhone || '—'}</div>
+              <div>
+                {[s.order.address, s.order.area, s.order.city].filter(Boolean).join(' — ') || '—'}
+              </div>
+            </div>
+          </div>
           <div className="meta">
-            <div>المستلم: {s.order.shippingName || '—'}</div>
-            <div>الهاتف: {s.order.shippingPhone || '—'}</div>
-            <div>
-              العنوان: {[s.order.address, s.order.area, s.order.city].filter(Boolean).join(' — ') || '—'}
-            </div>
-            <div>
-              مصدر الصفحة:{' '}
-              {s.order.facebookPage?.name ||
-                s.sourcePage ||
-                s.order.facebookPage?.publicCode ||
-                '—'}
-            </div>
             <div>رقم Accuratess: {s.trackingNumber || '—'}</div>
             <div>التحصيل: {money(s.order.totalAmount)}</div>
             <div>رسوم التوصيل: {money(s.fee)}</div>

@@ -68,7 +68,17 @@ export class UpdateDeliveryStatusDto {
 }
 
 export class BulkSlipsDto {
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  ids!: string[];
+  ids?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  orderIds?: string[];
+
+  @IsOptional()
+  @IsString()
+  facebookPageId?: string;
 }

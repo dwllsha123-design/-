@@ -1,20 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCart } from '../cart/CartContext';
 import { useAuth } from '../auth/AuthContext';
+import { useStoreCategories } from '../hooks/useStoreCategories';
 
-const drawerLinks = [
-  { to: '/new', label: 'وصلنا حديثاً', icon: 'new_releases' },
-  { to: '/category/lingerie', label: 'لانجري', icon: 'checkroom' },
-  { to: '/category/underwear', label: 'ملابس داخلية', icon: 'apparel' },
-  { to: '/category/robes', label: 'أرواب', icon: 'styler' },
-  { to: '/category/wigs', label: 'باروكات', icon: 'face_3' },
-  { to: '/offers', label: 'العروض', icon: 'sell' },
-  { to: '/bestseller', label: 'الأكثر مبيعاً', icon: 'trending_up' },
-  { to: '/wishlist', label: 'المفضلة', icon: 'favorite' },
-  { to: '/track', label: 'تتبع الطلب', icon: 'local_shipping' },
-  { to: '/contact', label: 'تواصل معنا', icon: 'contact_support' },
-];
+const CATEGORY_ICONS: Record<string, string> = {
+  lingerie: 'checkroom',
+  underwear: 'apparel',
+  robes: 'styler',
+  wigs: 'face_3',
+};
 
 function bottomActive(pathname: string, key: string) {
   if (key === 'home') return pathname === '/';
@@ -47,6 +42,23 @@ export function StoreLayout() {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const categories = useStoreCategories();
+  const drawerLinks = useMemo(
+    () => [
+      { to: '/new', label: 'وصلنا حديثاً', icon: 'new_releases' },
+      ...categories.map((c) => ({
+        to: `/category/${c.slug}`,
+        label: c.nameAr,
+        icon: CATEGORY_ICONS[c.slug] || 'category',
+      })),
+      { to: '/offers', label: 'العروض', icon: 'sell' },
+      { to: '/bestseller', label: 'الأكثر مبيعاً', icon: 'trending_up' },
+      { to: '/wishlist', label: 'المفضلة', icon: 'favorite' },
+      { to: '/track', label: 'تتبع الطلب', icon: 'local_shipping' },
+      { to: '/contact', label: 'تواصل معنا', icon: 'contact_support' },
+    ],
+    [categories],
+  );
 
   useEffect(() => {
     setDrawerOpen(false);
@@ -75,10 +87,10 @@ export function StoreLayout() {
               </button>
             </div>
 
-            <Link to="/" className="brand-center" aria-label="دار الأنوثة">
-              <img className="brand-logo" src="/brand-logo.png" alt="دار الأنوثة" />
-              <span className="brand-ar">دار الأنوثة</span>
-              <span className="brand-en">Dar Al-Onotha</span>
+            <Link to="/" className="brand-center" aria-label="دار الأنوثة — Dar Al Onoutha">
+              <span className="brand-mark">
+                <img className="brand-logo" src="/brand-logo.png" alt="دار الأنوثة" />
+              </span>
             </Link>
 
             <div className="header-side header-actions">
@@ -156,10 +168,11 @@ export function StoreLayout() {
 
       <footer className="site-footer">
         <div className="container footer-grid">
-          <div>
-            <h3>دار الأنوثة</h3>
-            <p>ملابس نسائية، لانجري، أرواب وباروكات — طرابلس، ليبيا</p>
-            <p>0911820999 · 0924443839</p>
+          <div className="footer-brand">
+            <img className="footer-logo" src="/brand-logo.png" alt="دار الأنوثة" />
+            <p>عنوان الأناقة والجاذبية في طرابلس. نُقدم لكِ أرقى تشكيلة من اللانجري، الملابس النسائية، الأرواب، والباروكات.</p>
+            <p>التوصيل متوفر لجميع مناطق ليبيا.</p>
+            <p>للتواصل: 0911820999 · 0924443839</p>
           </div>
           <div>
             <strong>تسوقي</strong>

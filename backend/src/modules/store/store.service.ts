@@ -21,6 +21,8 @@ import {
   findAreaFee,
   findDeliveryCity,
 } from '../../common/delivery/delivery-zones';
+import { OrderFulfillmentService } from '../delivery/order-fulfillment.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type PublicProduct = {
   id: string;
@@ -41,12 +43,11 @@ type PublicProduct = {
     size?: string | null;
     nameAr?: string | null;
     retailPrice: number;
-    available: number;
     inStock: boolean;
   }>;
-  available: number;
   inStock: boolean;
   createdAt: Date;
+  soldCount?: number;
 };
 
 @Injectable()
@@ -56,6 +57,8 @@ export class StoreService {
     private readonly inventory: CentralInventoryService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly fulfillment: OrderFulfillmentService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async company() {
@@ -102,10 +105,8 @@ export class StoreService {
         areas: c.areas.map((a) => a.nameAr),
       })),
       notes: {
-        internal:
-          'داخل طرابلس: التوصيل عبر مندوبي دار الأنوثة المسجّلين في النظام',
-        external:
-          'خارج طرابلس: بانتظار ربط API شركة التوصيل — الطلب يُسجَّل كتوصيل خارجي',
+        internal: 'سيتم التواصل معكِ لتأكيد موعد التوصيل.',
+        external: 'سيتم التواصل معكِ لتأكيد موعد التوصيل.',
       },
     };
   }
@@ -127,9 +128,7 @@ export class StoreService {
       deliveryType: isInternal ? 'INTERNAL' : 'EXTERNAL',
       deliveryFee,
       mode: zone.mode,
-      labelAr: isInternal
-        ? `توصيل داخلي — مندوبي دار الأنوثة${area ? ` (${area})` : ''}`
-        : `توصيل خارجي — بانتظار شركة التوصيل${area ? ` (${area})` : ''}`,
+      labelAr: area ? `رسوم التوصيل (${area})` : 'رسوم التوصيل',
       areas: zone.areas.map((a) => a.nameAr),
       feeSource: areaFee != null ? 'area' : 'city',
     };
@@ -180,10 +179,11 @@ export class StoreService {
     },
   ): Promise<PublicProduct> {
     const variants = [];
-    let totalAvailable = 0;
+    let anyInStock = false;
     for (const v of product.variants.filter((x) => x.isActive)) {
       const { available } = await this.inventory.getAvailability(v.id);
-      totalAvailable += available;
+      const inStock = available > 0;
+      if (inStock) anyInStock = true;
       variants.push({
         id: v.id,
         sku: v.sku,
@@ -191,8 +191,7 @@ export class StoreService {
         size: v.size,
         nameAr: v.nameAr,
         retailPrice: Number(v.retailPrice || v.price),
-        available,
-        inStock: available > 0,
+        inStock,
       });
     }
 
@@ -223,8 +222,7 @@ export class StoreService {
           isPrimary: i.isPrimary,
         })),
       variants,
-      available: totalAvailable,
-      inStock: totalAvailable > 0,
+      inStock: anyInStock,
       createdAt: product.createdAt,
     };
   }
@@ -308,7 +306,34 @@ export class StoreService {
       }
     }
 
-    return Promise.all(products.map((p) => this.mapProduct(p)));
+    const variantToProduct = new Map<string, string>();
+    for (const p of products) {
+      for (const v of p.variants) variantToProduct.set(v.id, p.id);
+    }
+    const soldRows = variantToProduct.size
+      ? await this.prisma.orderItem.groupBy({
+          by: ['variantId'],
+          where: { variantId: { in: [...variantToProduct.keys()] } },
+          _sum: { quantity: true },
+        })
+      : [];
+    const soldByProduct = new Map<string, number>();
+    for (const row of soldRows) {
+      if (!row.variantId) continue;
+      const productId = variantToProduct.get(row.variantId);
+      if (!productId) continue;
+      soldByProduct.set(
+        productId,
+        (soldByProduct.get(productId) || 0) + (row._sum.quantity || 0),
+      );
+    }
+
+    return Promise.all(
+      products.map(async (p) => ({
+        ...(await this.mapProduct(p)),
+        soldCount: soldByProduct.get(p.id) || 0,
+      })),
+    );
   }
 
   async productById(id: string) {
@@ -632,9 +657,7 @@ export class StoreService {
           );
           if (available < line.quantity) {
             throw new BadRequestException(
-              available <= 0
-                ? `غير متوفر: ${variant.product.nameAr}`
-                : `المتوفر من ${variant.product.nameAr}: ${available}`,
+              `غير متوفر حالياً: ${variant.product.nameAr}`,
             );
           }
         }
@@ -715,6 +738,9 @@ export class StoreService {
           paymentMethod: (dto.paymentMethod as never) || 'COD',
           paymentStatus: 'UNPAID',
           deliveryType: delivery.deliveryType as never,
+          fulfillmentType:
+            delivery.deliveryType === 'INTERNAL' ? 'INTERNAL' : 'EXTERNAL',
+          localStatus: delivery.deliveryType === 'INTERNAL' ? 'PENDING' : undefined,
           customerId: customer.id,
           salesAgentId,
           facebookPageId,
@@ -723,6 +749,11 @@ export class StoreService {
           agentPublicCode,
           referralVisitId,
           attributionSource,
+          pageSource: facebookPageId
+            ? undefined
+            : pagePublicCode
+              ? `صفحة #${pagePublicCode}`
+              : attributionSource,
           subtotal,
           discountAmount,
           promoCodeId,
@@ -743,6 +774,13 @@ export class StoreService {
         },
         include: { items: true, customer: true, facebookPage: true },
       });
+
+      if (order.facebookPage?.name && !order.pageSource) {
+        await tx.order.update({
+          where: { id: order.id },
+          data: { pageSource: order.facebookPage.name },
+        });
+      }
 
       // المخزون يُخصم عند تأكيد الطلب من لوحة الإدارة
       await tx.customer.update({
@@ -800,6 +838,50 @@ export class StoreService {
         items: order.items,
         id: order.id,
       };
+    }).then(async (created) => {
+      try {
+        await this.notifications.notifyOrderStakeholders(
+          {
+            id: created.id,
+            orderNumber: created.orderNumber,
+            shippingName: created.customer?.name,
+            facebookPageId: created.sourcePage?.id || facebookPageId,
+            salesAgentId,
+            facebookPage: created.sourcePage
+              ? { name: created.sourcePage.name }
+              : null,
+          },
+          {
+            titleAr: `طلب جديد من الموقع ${created.orderNumber}`,
+            bodyAr: [
+              created.customer?.name,
+              created.customer?.city,
+              `المبلغ ${created.totalAmount} د.ل`,
+            ]
+              .filter(Boolean)
+              .join(' — '),
+            type: 'ORDER_CREATED',
+          },
+        );
+      } catch {
+        /* لا نُفشل الطلب إذا تعثر الإشعار */
+      }
+
+      try {
+        const routed = await this.fulfillment.routeOrder(created.id);
+        return {
+          ...created,
+          fulfillmentType: routed.fulfillmentType,
+          localStatus:
+            'localStatus' in routed ? routed.localStatus : undefined,
+          fulfillmentError:
+            'error' in routed ? routed.error : undefined,
+          externalTrackingNumber:
+            routed.order.externalTrackingNumber || undefined,
+        };
+      } catch {
+        return created;
+      }
     });
   }
 }

@@ -71,7 +71,7 @@ export function PromosPage() {
     <div className="stack">
       <div className="page-title">
         <h1>كوبونات الخصم</h1>
-        <p>نسبة أو مبلغ ثابت مع صلاحية زمنية</p>
+        <p>من هنا تنشئين كود خصم للزبونات في المتجر: نسبة مئوية أو مبلغ ثابت، مع تاريخ بداية ونهاية وحد أدنى للطلب إن رغبتِ.</p>
       </div>
       {error ? <div className="error">{error}</div> : null}
       <form className="panel form-grid two" onSubmit={onCreate}>

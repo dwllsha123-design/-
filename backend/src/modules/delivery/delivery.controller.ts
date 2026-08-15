@@ -34,8 +34,8 @@ export class DeliveryController {
 
   @Get('pending-orders')
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
-  pendingOrders() {
-    return this.deliveryService.listPendingOrders();
+  pendingOrders(@CurrentUser() user: AuthUser) {
+    return this.deliveryService.listPendingOrders(user);
   }
 
   @Get('companies')
@@ -52,8 +52,13 @@ export class DeliveryController {
 
   @Get()
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
-  list(@Query('status') status?: string, @Query('type') type?: string) {
-    return this.deliveryService.listDeliveries(status, type);
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+    @Query('facebookPageId') facebookPageId?: string,
+  ) {
+    return this.deliveryService.listDeliveries(user, status, type, facebookPageId);
   }
 
   @Post('assign')
@@ -64,8 +69,8 @@ export class DeliveryController {
 
   @Post('slips/bulk')
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
-  bulkSlips(@Body() dto: BulkSlipsDto) {
-    return this.deliveryService.getShippingSlipsBulk(dto.ids || []);
+  bulkSlips(@CurrentUser() user: AuthUser, @Body() dto: BulkSlipsDto) {
+    return this.deliveryService.getShippingSlipsBulk(user, dto);
   }
 
   @Post('sync-accuratess')

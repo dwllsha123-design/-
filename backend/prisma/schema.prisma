@@ -66,6 +66,20 @@ enum DeliveryType {
   STORE
 }
 
+enum FulfillmentType {
+  INTERNAL
+  EXTERNAL
+}
+
+enum LocalOrderStatus {
+  PENDING
+  IN_WAREHOUSE
+  OUT_FOR_DELIVERY
+  DELIVERED
+  FAILED
+  RETURNED
+}
+
 enum DeliveryStatus {
   PENDING
   ASSIGNED
@@ -418,11 +432,12 @@ model FacebookPage {
   createdAt  DateTime           @default(now())
   updatedAt  DateTime           @updatedAt
 
-  manager       User?                   @relation("PageManager", fields: [managerId], references: [id])
-  employees     FacebookPageEmployee[]
-  orders        Order[]
-  reservations  StockReservation[]
-  referralVisits ReferralVisit[]
+  manager         User?                     @relation("PageManager", fields: [managerId], references: [id])
+  employees       FacebookPageEmployee[]
+  orders          Order[]
+  reservations    StockReservation[]
+  referralVisits  ReferralVisit[]
+  shippingAccount ExternalShippingAccount?
 
   @@map("facebook_pages")
 }
@@ -491,6 +506,12 @@ model Order {
   paymentStatus   PaymentStatus @default(UNPAID)
   deliveryType    DeliveryType  @default(INTERNAL)
 
+  /// توجيه ذكي: داخلي (طرابلس) أو خارجي (المعيار)
+  fulfillmentType FulfillmentType?
+  /// دورة حياة الطلبات الداخلية للمناديب
+  localStatus     LocalOrderStatus?
+  courierId       String?
+
   customerId      String?
   salesAgentId    String?
   cashierId       String?
@@ -502,6 +523,8 @@ model Order {
   agentPublicCode Int?
   referralVisitId String?
   attributionSource String?
+  /// مصدر الصفحة الفرعية (اسم/رمز) لربط حساب المعيار
+  pageSource      String?
 
   subtotal        Decimal
   discountAmount  Decimal       @default(0)
@@ -520,6 +543,12 @@ model Order {
   landmark        String?
   notes           String?
 
+  /// بيانات الشحن الخارجي (المعيار)
+  externalTrackingNumber String?
+  shippingLabelUrl       String?
+  externalResponsePayload String?
+  fulfillmentError       String?
+
   stockDeductedAt   DateTime?
   returnedToStockAt DateTime?
 
@@ -535,6 +564,7 @@ model Order {
   facebookPage  FacebookPage?  @relation(fields: [facebookPageId], references: [id])
   warehouse     Warehouse?     @relation(fields: [warehouseId], references: [id])
   referralVisit ReferralVisit? @relation(fields: [referralVisitId], references: [id])
+  courier       Courier?       @relation(fields: [courierId], references: [id])
   items         OrderItem[]
   deliveries    Delivery[]
   invoice       Invoice?
@@ -548,6 +578,9 @@ model Order {
   @@index([facebookPageId])
   @@index([orderBarcode])
   @@index([pagePublicCode, agentPublicCode])
+  @@index([fulfillmentType])
+  @@index([localStatus])
+  @@index([courierId])
   @@map("orders")
 }
 
@@ -571,6 +604,48 @@ model OrderItem {
 }
 
 // ─── Delivery ────────────────────────────────────────────
+
+/// مناديب التوصيل المحلي داخل طرابلس
+model Courier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?
+  isActive  Boolean  @default(true)
+  notes     String?
+  /// ربط اختياري بحساب مستخدم النظام (دور مندوب)
+  userId    String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([isActive])
+  @@map("couriers")
+}
+
+/// حسابات Accuratess / المعيار لكل صفحة تسويقية فرعية
+model ExternalShippingAccount {
+  id              String   @id @default(cuid())
+  facebookPageId  String   @unique
+  /// اسم تعريفي مثل لافينا / دار الأنوثة
+  label           String?
+  pageIdentifier  String?
+  provider        String   @default("ACCURATESS")
+  apiToken        String
+  endpoint        String?
+  senderZoneId    String?
+  senderSubzoneId String?
+  isActive        Boolean  @default(true)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  facebookPage FacebookPage @relation(fields: [facebookPageId], references: [id], onDelete: Cascade)
+
+  @@index([pageIdentifier])
+  @@index([isActive])
+  @@map("external_shipping_accounts")
+}
 
 model DeliveryCompany {
   id        String   @id @default(cuid())

@@ -50,7 +50,7 @@ export function CustomersPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>العملاء</h1>
-          <p>CRM مركزي لكل القنوات</p>
+          <p>من هنا تبحثين عن الزبائن: الاسم، الهاتف، المدينة، وطلباتهم السابقة سواء جاءت من المتجر أو فيسبوك أو نقطة البيع.</p>
         </div>
       </div>
 

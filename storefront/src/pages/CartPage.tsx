@@ -18,7 +18,8 @@ export function CartPage() {
       <div className="section-head">
         <h2>سلة التسوق</h2>
       </div>
-      <div className="panel table-wrap">
+
+      <div className="cart-desktop panel table-wrap">
         <table>
           <thead>
             <tr>
@@ -35,37 +36,85 @@ export function CartPage() {
               <tr key={i.variantId}>
                 <td>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {i.image ? <img src={i.image} alt="" width={56} height={70} style={{ objectFit: 'cover', borderRadius: 8 }} /> : null}
-                    <span>{i.nameAr}</span>
+                    {i.image ? (
+                      <img
+                        src={i.image}
+                        alt=""
+                        width={56}
+                        height={70}
+                        style={{ objectFit: 'cover', borderRadius: 8 }}
+                      />
+                    ) : null}
+                    <Link to={`/product/${i.productId}`}>{i.nameAr}</Link>
                   </div>
                 </td>
                 <td>{[i.color, i.size].filter(Boolean).join(' / ') || '—'}</td>
                 <td>
                   <div className="qty">
-                    <button type="button" onClick={() => setQty(i.variantId, i.quantity - 1)}>-</button>
+                    <button type="button" onClick={() => setQty(i.variantId, i.quantity - 1)}>
+                      -
+                    </button>
                     <span>{i.quantity}</span>
-                    <button type="button" onClick={() => setQty(i.variantId, i.quantity + 1)}>+</button>
+                    <button type="button" onClick={() => setQty(i.variantId, i.quantity + 1)}>
+                      +
+                    </button>
                   </div>
                 </td>
                 <td>{money(i.unitPrice)}</td>
                 <td>{money(i.unitPrice * i.quantity)}</td>
                 <td>
-                  <button className="btn ghost" type="button" onClick={() => remove(i.variantId)}>حذف</button>
+                  <button className="btn ghost" type="button" onClick={() => remove(i.variantId)}>
+                    حذف
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <div className="panel" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+
+      <div className="cart-mobile">
+        {items.map((i) => (
+          <article key={i.variantId} className="cart-line panel">
+            {i.image ? <img src={i.image} alt="" /> : <div className="cart-line-ph" />}
+            <div className="cart-line-body">
+              <Link to={`/product/${i.productId}`} className="name">
+                {i.nameAr}
+              </Link>
+              <div className="muted">{[i.color, i.size].filter(Boolean).join(' / ') || '—'}</div>
+              <div className="price">{money(i.unitPrice * i.quantity)}</div>
+              <div className="cart-line-actions">
+                <div className="qty">
+                  <button type="button" onClick={() => setQty(i.variantId, i.quantity - 1)}>
+                    -
+                  </button>
+                  <span>{i.quantity}</span>
+                  <button type="button" onClick={() => setQty(i.variantId, i.quantity + 1)}>
+                    +
+                  </button>
+                </div>
+                <button className="btn ghost" type="button" onClick={() => remove(i.variantId)}>
+                  حذف
+                </button>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="panel cart-summary">
         <div>
           <div className="muted">المجموع الفرعي</div>
           <strong style={{ fontSize: 22 }}>{money(subtotal)}</strong>
           <div className="muted">رسوم التوصيل تُحسب في الدفع حسب المدينة</div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <Link className="btn secondary" to="/products">متابعة التسوق</Link>
-          <Link className="btn" to="/checkout">إتمام الطلب</Link>
+        <div className="cart-summary-actions">
+          <Link className="btn secondary" to="/products">
+            متابعة التسوق
+          </Link>
+          <Link className="btn" to="/checkout">
+            إتمام الطلب
+          </Link>
         </div>
       </div>
     </section>

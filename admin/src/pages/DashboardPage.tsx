@@ -9,9 +9,15 @@ type DashboardData = {
   month: { orders: number; sales: number };
   pendingOrders: number;
   lowStock: number;
+  remainingStockUnits?: number;
+  stockSkus?: number;
   pendingMarketers?: number;
   customersCount: number;
   productsCount: number;
+  channelSales?: {
+    online: { orders: number; sales: number };
+    pos: { orders: number; sales: number };
+  };
   bySource: Array<{ source: string; count: number; total: number }>;
   recentOrders: Array<{
     id: string;
@@ -51,7 +57,10 @@ export function DashboardPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>الرئيسية</h1>
-          <p>مؤشرات يومية وأسبوعية وشهرية + تنبيهات المخزون</p>
+          <p>
+            ملخص المنظومة: مبيعات الأونلاين مقابل نقطة البيع، المخزون المتبقي في المخزن المركزي،
+            وتنبيهات النفاد.
+          </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Link className="btn secondary" to="/inventory">
@@ -85,6 +94,28 @@ export function DashboardPage() {
 
       <div className="stats">
         <div className="stat">
+          <div className="stat-label">مبيعات الأونلاين (اليوم)</div>
+          <div className="stat-value">{money(data?.channelSales?.online?.sales || 0)}</div>
+          <div className="stat-hint">{data?.channelSales?.online?.orders ?? 0} طلب موقع/فيسبوك</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">مبيعات نقطة البيع (اليوم)</div>
+          <div className="stat-value">{money(data?.channelSales?.pos?.sales || 0)}</div>
+          <div className="stat-hint">{data?.channelSales?.pos?.orders ?? 0} فاتورة محل</div>
+        </div>
+        <div className="stat">
+          <div className="stat-label">المخزون المتبقي</div>
+          <div className="stat-value">{data?.remainingStockUnits ?? '—'}</div>
+          <div className="stat-hint">{data?.stockSkus ?? 0} صنف في المخزن المركزي</div>
+        </div>
+        <div className={`stat${(data?.lowStock || 0) > 0 ? ' alert' : ''}`}>
+          <div className="stat-label">مخزون منخفض</div>
+          <div className="stat-value">{data?.lowStock ?? '—'}</div>
+        </div>
+      </div>
+
+      <div className="stats">
+        <div className="stat">
           <div className="stat-label">مبيعات اليوم</div>
           <div className="stat-value">{money(data?.today?.sales || 0)}</div>
           <div className="stat-hint">{data?.today?.orders ?? 0} طلب</div>
@@ -99,17 +130,13 @@ export function DashboardPage() {
           <div className="stat-value">{money(data?.month?.sales || 0)}</div>
           <div className="stat-hint">{data?.month?.orders ?? 0} طلب</div>
         </div>
-        <div className={`stat${(data?.lowStock || 0) > 0 ? ' alert' : ''}`}>
-          <div className="stat-label">مخزون منخفض</div>
-          <div className="stat-value">{data?.lowStock ?? '—'}</div>
-        </div>
-      </div>
-
-      <div className="stats">
         <div className="stat">
           <div className="stat-label">قيد التنفيذ</div>
           <div className="stat-value">{data?.pendingOrders ?? '—'}</div>
         </div>
+      </div>
+
+      <div className="stats">
         <div className="stat">
           <div className="stat-label">مسوقون بانتظار الموافقة</div>
           <div className="stat-value">{data?.pendingMarketers ?? 0}</div>

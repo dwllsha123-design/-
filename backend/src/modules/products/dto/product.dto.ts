@@ -10,8 +10,9 @@ import {
 import { Type } from 'class-transformer';
 
 export class CreateVariantDto {
+  @IsOptional()
   @IsString()
-  sku!: string;
+  sku?: string;
 
   @IsOptional()
   @IsString()
@@ -97,6 +98,24 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)
   variants?: CreateVariantDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  imageUrls?: string[];
+}
+
+export class AddProductImageDto {
+  @IsString()
+  url!: string;
+
+  @IsOptional()
+  @IsString()
+  alt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
 }
 
 export class UpdateProductDto {

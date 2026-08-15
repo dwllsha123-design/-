@@ -160,6 +160,40 @@ export class MarketingService {
     return updated;
   }
 
+  async uploadBannerImage(
+    id: string,
+    file: { filename?: string; originalname: string; mimetype: string },
+  ) {
+    const banner = await this.prisma.banner.findUnique({ where: { id } });
+    if (!banner) throw new NotFoundException('اللافتة غير موجودة');
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (file.mimetype && !allowed.includes(file.mimetype)) {
+      throw new BadRequestException('صيغة الصورة غير مدعومة (JPG / PNG / WEBP)');
+    }
+    if (!file.filename) throw new BadRequestException('اختاري صورة للرفع');
+    const imageUrl = `/uploads/banners/${file.filename}`;
+    return this.prisma.banner.update({
+      where: { id },
+      data: { imageUrl },
+    });
+  }
+
+  async deleteBanner(user: AuthUser, id: string) {
+    await this.prisma.banner.findUniqueOrThrow({ where: { id } }).catch(() => {
+      throw new NotFoundException('اللافتة غير موجودة');
+    });
+    await this.prisma.banner.delete({ where: { id } });
+    await this.prisma.auditLog.create({
+      data: {
+        userId: user.id,
+        action: 'banner.delete',
+        entityType: 'Banner',
+        entityId: id,
+      },
+    });
+    return { ok: true };
+  }
+
   async validatePromo(code: string, subtotal: number) {
     const promo = await this.prisma.promoCode.findFirst({
       where: { code: code.trim().toUpperCase(), active: true },

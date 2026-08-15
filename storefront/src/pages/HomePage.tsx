@@ -2,52 +2,35 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type StoreProduct } from '../api/client';
 import { ProductGrid } from '../components/ProductCard';
+import { StoreLink } from '../components/StoreLink';
+import { categoryImage } from '../data/catalog';
+import { useStoreCategories } from '../hooks/useStoreCategories';
 
-const bento = [
-  {
-    to: '/category/lingerie',
-    title: 'لانجري',
-    className: 'bento-card span-2',
-    image:
-      'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=900&q=80',
-  },
-  {
-    to: '/category/underwear',
-    title: 'ملابس داخلية',
-    className: 'bento-card',
-    image:
-      'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    to: '/category/robes',
-    title: 'أرواب',
-    className: 'bento-card',
-    image:
-      'https://images.unsplash.com/photo-1583292650898-7d22cd27ca6f?auto=format&fit=crop&w=600&q=80',
-  },
-  {
-    to: '/category/wigs',
-    title: 'باروكات',
-    className: 'bento-card',
-    image:
-      'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=600&q=80',
-  },
-];
+type Banner = {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+};
 
 export function HomePage() {
   const [newItems, setNewItems] = useState<StoreProduct[]>([]);
   const [bestsellers, setBestsellers] = useState<StoreProduct[]>([]);
-  const [banners, setBanners] = useState<
-    Array<{ id: string; title: string; subtitle?: string; imageUrl?: string; linkUrl?: string }>
-  >([]);
+  const [offers, setOffers] = useState<StoreProduct[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const categories = useStoreCategories();
 
   useEffect(() => {
     api<StoreProduct[]>('/store/products?collection=new').then(setNewItems).catch(() => undefined);
     api<StoreProduct[]>('/store/products?collection=bestseller')
       .then(setBestsellers)
       .catch(() => undefined);
-    api<typeof banners>('/store/banners').then(setBanners).catch(() => undefined);
+    api<StoreProduct[]>('/store/products?collection=offers').then(setOffers).catch(() => undefined);
+    api<Banner[]>('/store/banners').then(setBanners).catch(() => undefined);
   }, []);
+
+  const featured = categories.slice(0, 4);
 
   return (
     <>
@@ -75,18 +58,13 @@ export function HomePage() {
 
       {banners.length ? (
         <section className="container section">
-          <div className="bento">
+          <div className="banner-row">
             {banners.map((b) => (
-              <a
-                key={b.id}
-                className="bento-card span-2"
-                href={b.linkUrl || '/offers'}
-                style={{ textDecoration: 'none' }}
-              >
+              <StoreLink key={b.id} className="banner-card" to={b.linkUrl || '/offers'}>
                 {b.imageUrl ? (
                   <div className="bg" style={{ backgroundImage: `url('${b.imageUrl}')` }} />
                 ) : (
-                  <div className="bg" style={{ background: 'linear-gradient(120deg,#3d2a32,#8b5a6b)' }} />
+                  <div className="bg banner-fallback" />
                 )}
                 <div className="veil" />
                 <div className="label">
@@ -95,7 +73,7 @@ export function HomePage() {
                   </h3>
                   {b.subtitle ? <p className="body-md">{b.subtitle}</p> : null}
                 </div>
-              </a>
+              </StoreLink>
             ))}
           </div>
         </section>
@@ -104,13 +82,17 @@ export function HomePage() {
       <section className="container section">
         <h2 className="headline-lg section-title">تسوقي حسب الفئة</h2>
         <div className="bento">
-          {bento.map((c) => (
-            <Link key={c.to} to={c.to} className={c.className}>
-              <div className="bg" style={{ backgroundImage: `url('${c.image}')` }} />
+          {featured.map((c, idx) => (
+            <Link
+              key={c.id}
+              to={`/category/${c.slug}`}
+              className={idx === 0 ? 'bento-card span-2' : 'bento-card'}
+            >
+              <div className="bg" style={{ backgroundImage: `url('${categoryImage(c.slug)}')` }} />
               <div className="veil" />
               <div className="label">
                 <h3 className="headline-md" style={{ margin: 0 }}>
-                  {c.title}
+                  {c.nameAr}
                 </h3>
               </div>
             </Link>
@@ -157,6 +139,21 @@ export function HomePage() {
         </div>
         <ProductGrid products={newItems.slice(0, 4)} />
       </section>
+
+      {offers.length ? (
+        <section className="container section">
+          <div className="section-head">
+            <div>
+              <h2 className="headline-lg">العروض الحالية</h2>
+              <p>خصومات محدودة على تشكيلات مختارة</p>
+            </div>
+            <Link className="label-md" to="/offers" style={{ color: 'var(--primary)' }}>
+              كل العروض
+            </Link>
+          </div>
+          <ProductGrid products={offers.slice(0, 4)} />
+        </section>
+      ) : null}
 
       <section className="container section">
         <div className="section-head">

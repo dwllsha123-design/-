@@ -60,7 +60,7 @@ export function ReturnsPage() {
     <div className="stack">
       <div className="page-title">
         <h1>إرجاع للمخزون</h1>
-        <p>امسح باركود الطلب مثل ORD-2026-000001</p>
+        <p>من هنا ترجعين القطع إلى المخزون بعد مرتجع: امسحي باركود الطلب (مثل ORD-2026-000001) ثم حددي الكميات المراد إرجاعها.</p>
       </div>
 
       <form className="panel toolbar" onSubmit={scan}>

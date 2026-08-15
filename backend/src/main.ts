@@ -1,12 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { RequestMethod, ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+
+  const uploadsDir = join(process.cwd(), 'uploads');
+  mkdirSync(join(uploadsDir, 'products'), { recursive: true });
+  mkdirSync(join(uploadsDir, 'banners'), { recursive: true });
+  app.useStaticAssets(uploadsDir, { prefix: '/uploads/' });
 
   app.setGlobalPrefix('api/v1', {
     exclude: [

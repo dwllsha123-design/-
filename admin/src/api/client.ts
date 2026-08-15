@@ -39,16 +39,41 @@ export async function api<T>(
     headers,
   });
 
-  const json = (await res.json()) as ApiResponse<T> & T;
-  if (!res.ok) {
+  const text = await res.text();
+  let json: (ApiResponse<T> & T) | null = null;
+  if (text) {
+    try {
+      json = JSON.parse(text) as ApiResponse<T> & T;
+    } catch {
+      throw new Error('تعذر قراءة رد الخادم');
+    }
+  }
+  if (!res.ok || !json) {
     const message =
-      (json as ApiResponse<T>).message ||
-      (typeof json === 'object' && json && 'message' in json
-        ? String((json as { message: string }).message)
+      (json as ApiResponse<T> | null)?.message ||
+      (res.status === 0 || res.status >= 500
+        ? 'تعذر الاتصال بالخادم. تأكدي أن النظام يعمل ثم أعيدي المحاولة.'
         : 'حدث خطأ');
     throw new Error(message);
   }
 
+  if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
+    return (json as ApiResponse<T>).data as T;
+  }
+  return json as T;
+}
+
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const body = new FormData();
+  body.append('file', file);
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', headers, body });
+  const json = (await res.json()) as ApiResponse<T> & T;
+  if (!res.ok) {
+    throw new Error((json as ApiResponse<T>).message || 'فشل رفع الملف');
+  }
   if (json && typeof json === 'object' && 'success' in json && 'data' in json) {
     return (json as ApiResponse<T>).data as T;
   }
@@ -83,7 +108,7 @@ export const statusLabel: Record<string, string> = {
   PENDING: 'معلّق',
   PICKED_UP: 'تم الاستلام',
   IN_TRANSIT: 'في الطريق',
-  FAILED: 'فشل التوصيل',
+  FAILED: 'تعذر التسليم',
 };
 
 export function statusBadgeClass(status: string): string {
@@ -103,6 +128,7 @@ export function statusBadgeClass(status: string): string {
     case 'CANCELLED':
     case 'RETURNED':
     case 'PARTIALLY_RETURNED':
+    case 'FAILED':
     case 'INACTIVE':
       return 'badge danger';
     default:

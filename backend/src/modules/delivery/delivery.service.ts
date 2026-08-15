@@ -8,6 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import {
   AssignDeliveryDto,
+  BulkSlipsDto,
   CreateDeliveryCompanyDto,
   UpdateDeliveryStatusDto,
 } from './dto/delivery.dto';
@@ -19,6 +20,13 @@ import {
 import { StoreService } from '../store/store.service';
 import { AccuratessService } from './accuratess.service';
 import { CentralInventoryService } from '../inventory/services/central-inventory.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+const orderPageSelect = {
+  id: true,
+  name: true,
+  publicCode: true,
+} as const;
 
 @Injectable()
 export class DeliveryService {
@@ -27,10 +35,78 @@ export class DeliveryService {
     private readonly storeService: StoreService,
     private readonly accuratess: AccuratessService,
     private readonly inventory: CentralInventoryService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   quote(city?: string, area?: string) {
     return this.storeService.resolveDelivery(city, area);
+  }
+
+  private isAdmin(user: AuthUser) {
+    return user.roles.includes('super_admin') || user.roles.includes('admin');
+  }
+
+  private async orderScope(user: AuthUser): Promise<Prisma.OrderWhereInput | undefined> {
+    if (this.isAdmin(user) || user.roles.includes(ROLE_CODES.DELIVERY_AGENT)) {
+      return undefined;
+    }
+    if (user.roles.includes(ROLE_CODES.SALES_AGENT)) {
+      const pages = await this.prisma.facebookPageEmployee.findMany({
+        where: { userId: user.id },
+        select: { pageId: true },
+      });
+      return {
+        OR: [
+          { salesAgentId: user.id },
+          { facebookPageId: { in: pages.map((p) => p.pageId) } },
+        ],
+      };
+    }
+    return undefined;
+  }
+
+  async listDeliveries(
+    user: AuthUser,
+    status?: string,
+    type?: string,
+    facebookPageId?: string,
+  ) {
+    const scope = await this.orderScope(user);
+    return this.prisma.delivery.findMany({
+      where: {
+        ...(status ? { status: status as never } : {}),
+        ...(type ? { type: type as never } : {}),
+        order: {
+          ...(facebookPageId ? { facebookPageId } : {}),
+          ...(scope || {}),
+        },
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            shippingName: true,
+            shippingPhone: true,
+            city: true,
+            area: true,
+            address: true,
+            totalAmount: true,
+            deliveryType: true,
+            deliveryFee: true,
+            pagePublicCode: true,
+            fulfillmentType: true,
+            localStatus: true,
+            facebookPage: { select: orderPageSelect },
+            courier: { select: { id: true, name: true, phone: true } },
+          },
+        },
+        agent: { select: { id: true, name: true, phone: true } },
+        company: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
   }
 
   async listAgents() {
@@ -60,41 +136,14 @@ export class DeliveryService {
     return this.prisma.deliveryCompany.create({ data: dto });
   }
 
-  listDeliveries(status?: string, type?: string) {
-    return this.prisma.delivery.findMany({
-      where: {
-        ...(status ? { status: status as never } : {}),
-        ...(type ? { type: type as never } : {}),
-      },
-      include: {
-        order: {
-          select: {
-            id: true,
-            orderNumber: true,
-            shippingName: true,
-            shippingPhone: true,
-            city: true,
-            area: true,
-            address: true,
-            totalAmount: true,
-            deliveryType: true,
-            deliveryFee: true,
-          },
-        },
-        agent: { select: { id: true, name: true, phone: true } },
-        company: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    });
-  }
-
   /** طلبات جاهزة للتعيين ولم يُنشأ لها سجل توصيل بعد */
-  async listPendingOrders() {
+  async listPendingOrders(user: AuthUser) {
+    const scope = await this.orderScope(user);
     return this.prisma.order.findMany({
       where: {
         status: { in: ['NEW', 'CONFIRMED', 'PREPARING', 'READY'] },
         deliveries: { none: {} },
+        ...(scope || {}),
       },
       select: {
         id: true,
@@ -105,10 +154,15 @@ export class DeliveryService {
         area: true,
         address: true,
         deliveryType: true,
+        fulfillmentType: true,
+        localStatus: true,
+        courierId: true,
         deliveryFee: true,
         totalAmount: true,
         status: true,
         createdAt: true,
+        pagePublicCode: true,
+        facebookPage: { select: orderPageSelect },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,
@@ -121,6 +175,23 @@ export class DeliveryService {
       where: { shippingSlipNo: { startsWith: `SLIP-${year}-` } },
     });
     return `SLIP-${year}-${String(count + 1).padStart(6, '0')}`;
+  }
+
+  /** اسم الراسل = اسم صفحة فيسبوك التي حجز الزبون عبر رابطها */
+  private async resolveSenderName(order: {
+    facebookPage?: { name: string } | null;
+    pagePublicCode?: number | null;
+  }): Promise<string> {
+    const fromRelation = order.facebookPage?.name?.trim();
+    if (fromRelation) return fromRelation;
+    if (order.pagePublicCode) {
+      const page = await this.prisma.facebookPage.findUnique({
+        where: { publicCode: order.pagePublicCode },
+        select: { name: true },
+      });
+      if (page?.name?.trim()) return page.name.trim();
+    }
+    return 'دار الأنوثة';
   }
 
   async assign(user: AuthUser, dto: AssignDeliveryDto) {
@@ -151,14 +222,30 @@ export class DeliveryService {
     let trackingUrl: string | undefined;
     let externalRef: string | undefined;
 
-    // خارج طرابلس: إرسال لشركة Accuratess مع مرجع الصفحة
+    const senderName = await this.resolveSenderName(order);
+
+    // خارج طرابلس: إرسال لشركة Accuratess بمفتاح حساب الصفحة إن وُجد
     let accuratessResult: Record<string, unknown> | null = null;
     if (type === 'EXTERNAL') {
-      const sourcePage =
-        order.facebookPage?.name ||
-        (order.pagePublicCode ? `صفحة #${order.pagePublicCode}` : 'بدون صفحة');
+      const account = await this.prisma.externalShippingAccount.findFirst({
+        where: {
+          isActive: true,
+          OR: [
+            ...(order.facebookPageId
+              ? [{ facebookPageId: order.facebookPageId }]
+              : []),
+            ...(order.pageSource
+              ? [
+                  { pageIdentifier: order.pageSource },
+                  { label: order.pageSource },
+                ]
+              : []),
+          ],
+        },
+      });
       const shipped = await this.accuratess.saveShipment({
         orderNumber: order.orderNumber,
+        senderName,
         recipientName: order.shippingName || 'عميل',
         recipientPhone: order.shippingPhone || '',
         recipientAddress: order.address || order.area || order.city || 'ليبيا',
@@ -167,8 +254,16 @@ export class DeliveryService {
         notes: order.notes,
         price: Number(order.totalAmount || 0),
         deliveryFees: Number(dto.fee ?? order.deliveryFee ?? 0),
-        sourcePage,
+        sourcePage: senderName,
         sourcePageCode: order.pagePublicCode,
+        account: account
+          ? {
+              apiToken: account.apiToken,
+              endpoint: account.endpoint,
+              senderZoneId: account.senderZoneId,
+              senderSubzoneId: account.senderSubzoneId,
+            }
+          : null,
       });
       accuratessResult = shipped as Record<string, unknown>;
 
@@ -191,7 +286,7 @@ export class DeliveryService {
           notes,
           `Accuratess code=${result.shipment.code || ''}`,
           trackingUrl ? `track=${trackingUrl}` : '',
-          `source_page=${sourcePage}`,
+          `source_page=${senderName}`,
         ]
           .filter(Boolean)
           .join(' | ');
@@ -285,7 +380,7 @@ export class DeliveryService {
             orderId: dto.orderId,
             type,
             shippingSlipNo,
-            sourcePage: order.facebookPage?.name || order.pagePublicCode,
+            sourcePage: senderName,
             accuratess: accuratessResult ?? null,
           } as Prisma.InputJsonValue,
         },
@@ -308,12 +403,12 @@ export class DeliveryService {
     if (dto.status === 'PICKED_UP') data.pickedUpAt = new Date();
     if (dto.status === 'DELIVERED') data.deliveredAt = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.delivery.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.delivery.update({
         where: { id },
         data,
         include: {
-          order: true,
+          order: { include: { facebookPage: true } },
           agent: { select: { id: true, name: true } },
           company: true,
         },
@@ -355,8 +450,37 @@ export class DeliveryService {
         },
       });
 
-      return updated;
+      return saved;
     });
+
+    if (dto.status !== delivery.status) {
+      if (dto.status === 'DELIVERED') {
+        await this.notifications.notifyOrderStakeholders(updated.order, {
+          titleAr: 'تم التسليم',
+          type: 'ORDER_DELIVERED',
+        });
+      }
+      if (dto.status === 'FAILED') {
+        await this.notifications.notifyOrderStakeholders(updated.order, {
+          titleAr: 'تعذر التسليم',
+          type: 'ORDER_DELIVERY_FAILED',
+        });
+      }
+      if (dto.status === 'RETURNED') {
+        await this.notifications.notifyOrderStakeholders(updated.order, {
+          titleAr: 'مرتجع توصيل',
+          type: 'ORDER_RETURNED',
+        });
+      }
+      if (dto.status === 'IN_TRANSIT') {
+        await this.notifications.notifyOrderStakeholders(updated.order, {
+          titleAr: 'الطلب في الطريق',
+          type: 'ORDER_OUT_FOR_DELIVERY',
+        });
+      }
+    }
+
+    return updated;
   }
 
   async getShippingSlip(id: string) {
@@ -375,20 +499,93 @@ export class DeliveryService {
       },
     });
     if (!delivery) throw new NotFoundException('بوليصة الشحن غير موجودة');
+    const senderName = await this.resolveSenderName(delivery.order);
     return {
       ...delivery,
       printTitle: 'بوليصة شحن — دار الأنوثة',
-      sourcePage: delivery.order.facebookPage?.name || delivery.order.pagePublicCode,
+      senderName,
+      sourcePage: senderName,
     };
   }
 
-  async getShippingSlipsBulk(ids: string[]) {
-    if (!ids?.length) throw new BadRequestException('حدد بوليصات للطباعة');
-    const slips = [];
-    for (const id of ids) {
-      slips.push(await this.getShippingSlip(id));
+  async slipFromOrder(orderId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: true,
+        customer: true,
+        facebookPage: { select: { id: true, name: true, publicCode: true } },
+        deliveries: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            agent: { select: { id: true, name: true, phone: true } },
+            company: true,
+          },
+        },
+      },
+    });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+    if (order.deliveries[0]) {
+      return this.getShippingSlip(order.deliveries[0].id);
     }
-    return { slips };
+    const senderName = await this.resolveSenderName(order);
+    return {
+      id: order.id,
+      shippingSlipNo: order.orderNumber,
+      trackingNumber: null,
+      trackingUrl: null,
+      fee: order.deliveryFee,
+      type: order.deliveryType,
+      status: order.status,
+      senderName,
+      sourcePage: senderName,
+      agent: null,
+      company: null,
+      printTitle: 'بوليصة شحن — دار الأنوثة',
+      order,
+    };
+  }
+
+  async getShippingSlipsBulk(user: AuthUser, dto: BulkSlipsDto) {
+    const slips = [];
+    if (dto.facebookPageId) {
+      const scope = await this.orderScope(user);
+      const orders = await this.prisma.order.findMany({
+        where: {
+          facebookPageId: dto.facebookPageId,
+          status: { notIn: ['CANCELLED', 'DRAFT'] },
+          ...(scope || {}),
+        },
+        select: { id: true },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+      });
+      if (!orders.length) {
+        throw new BadRequestException('لا توجد بوليصات لهذه الصفحة');
+      }
+      for (const o of orders) slips.push(await this.slipFromOrder(o.id));
+      return { slips };
+    }
+    if (dto.orderIds?.length) {
+      for (const id of dto.orderIds) slips.push(await this.slipFromOrder(id));
+      return { slips };
+    }
+    if (dto.ids?.length) {
+      for (const id of dto.ids) {
+        const asDelivery = await this.prisma.delivery.findUnique({
+          where: { id },
+          select: { id: true },
+        });
+        slips.push(
+          asDelivery
+            ? await this.getShippingSlip(id)
+            : await this.slipFromOrder(id),
+        );
+      }
+      return { slips };
+    }
+    throw new BadRequestException('حدد بوليصات للطباعة');
   }
 
   async syncAccuratess(user: AuthUser, id: string) {

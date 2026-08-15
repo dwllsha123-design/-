@@ -164,7 +164,9 @@ export function NewFacebookOrderPage() {
     <div className="stack">
       <div className="page-title">
         <h1>طلب فيسبوك</h1>
-        <p>الموظف: {user?.name}</p>
+        <p>
+          من هنا تسجّلين طلباً وصل عبر محادثة فيسبوك: بيانات الزبون، المنتجات، المدينة، والصفحة التي جاء منها الطلب حتى يُحسب للمصدر الصحيح. الموظفة: {user?.name}
+        </p>
       </div>
 
       <form className="panel stack" onSubmit={onSubmit}>

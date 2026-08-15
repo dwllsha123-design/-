@@ -2,6 +2,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, type StoreProduct } from '../api/client';
 import { ProductGrid } from '../components/ProductCard';
+import { categoryImage } from '../data/catalog';
+import { useStoreCategories } from '../hooks/useStoreCategories';
 
 const titles: Record<string, string> = {
   lingerie: 'لانجري',
@@ -14,7 +16,7 @@ const titles: Record<string, string> = {
   products: 'المتجر',
 };
 
-type SortKey = 'new' | 'bestseller' | 'price';
+type SortKey = 'new' | 'bestseller' | 'price' | 'price-desc';
 
 export function CatalogPage({
   mode,
@@ -26,13 +28,21 @@ export function CatalogPage({
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [products, setProducts] = useState<StoreProduct[]>([]);
+  const categories = useStoreCategories();
   const [error, setError] = useState('');
   const [qInput, setQInput] = useState(params.get('q') || '');
   const [sort, setSort] = useState<SortKey>('new');
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [onSaleOnly, setOnSaleOnly] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const q = params.get('q') || '';
 
   const collectionSlug =
     mode === 'collection' ? location.pathname.replace('/', '') || slug : slug;
+
+  useEffect(() => {
+    setQInput(q);
+  }, [q]);
 
   useEffect(() => {
     let path = '/store/products';
@@ -52,10 +62,14 @@ export function CatalogPage({
       .catch((e) => setError(e.message));
   }, [mode, slug, collectionSlug, q]);
 
-  const sorted = useMemo(() => {
-    const list = [...products];
+  const filtered = useMemo(() => {
+    let list = [...products];
+    if (inStockOnly) list = list.filter((p) => p.inStock);
+    if (onSaleOnly) list = list.filter((p) => p.discountPercent > 0);
     if (sort === 'price') {
       list.sort((a, b) => Number(a.retailPrice) - Number(b.retailPrice));
+    } else if (sort === 'price-desc') {
+      list.sort((a, b) => Number(b.retailPrice) - Number(a.retailPrice));
     } else if (sort === 'bestseller') {
       list.sort((a, b) => (b.soldCount || 0) - (a.soldCount || 0));
     } else {
@@ -66,19 +80,21 @@ export function CatalogPage({
       });
     }
     return list;
-  }, [products, sort]);
+  }, [products, sort, inStockOnly, onSaleOnly]);
 
   const title =
     mode === 'search'
       ? q
         ? `بحث: ${q}`
         : 'البحث'
-      : titles[collectionSlug || slug || 'products'] || titles.products;
+      : titles[collectionSlug || slug || 'products'] ||
+        categories.find((c) => c.slug === slug)?.nameAr ||
+        titles.products;
 
   const subtitle =
     mode === 'all'
       ? 'اكتشفي أحدث صيحات الموضة التي تبرز أنوثتك'
-      : `${sorted.length} منتج`;
+      : `${filtered.length} منتج`;
 
   function onSearch(e: FormEvent) {
     e.preventDefault();
@@ -96,13 +112,26 @@ export function CatalogPage({
         <p className="body-lg">{subtitle}</p>
       </div>
 
+      {mode === 'all' || mode === 'search' || mode === 'category' ? (
+        <div className="sort-pills" style={{ marginBottom: 16 }}>
+          <Link to="/products" className={!slug && mode !== 'search' ? 'active' : ''}>
+            الكل
+          </Link>
+          {categories.map((c) => (
+            <Link key={c.id} to={`/category/${c.slug}`} className={slug === c.slug ? 'active' : ''}>
+              {c.nameAr}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
       <div className="catalog-toolbar">
         <form className="search-field" onSubmit={onSearch}>
           <span className="material-symbols-outlined search-icon">search</span>
           <input
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
-            placeholder="ابحثي عن فستان، عباية..."
+            placeholder="ابحثي عن منتج..."
           />
         </form>
         <div className="sort-row hide-scroll">
@@ -122,10 +151,22 @@ export function CatalogPage({
               className={sort === 'price' ? 'active' : ''}
               onClick={() => setSort('price')}
             >
-              السعر
+              السعر ↑
+            </button>
+            <button
+              type="button"
+              className={sort === 'price-desc' ? 'active' : ''}
+              onClick={() => setSort('price-desc')}
+            >
+              السعر ↓
             </button>
           </div>
-          <button type="button" className="btn soft" style={{ borderRadius: 999, padding: '8px 20px' }}>
+          <button
+            type="button"
+            className={`btn soft${filtersOpen || inStockOnly || onSaleOnly ? ' filter-on' : ''}`}
+            style={{ borderRadius: 999, padding: '8px 20px' }}
+            onClick={() => setFiltersOpen((v) => !v)}
+          >
             تصفية
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
               tune
@@ -134,57 +175,35 @@ export function CatalogPage({
         </div>
       </div>
 
+      {filtersOpen ? (
+        <div className="panel filter-panel">
+          <label>
+            <input
+              type="checkbox"
+              checked={inStockOnly}
+              onChange={(e) => setInStockOnly(e.target.checked)}
+            />
+            المتوفر فقط
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={onSaleOnly}
+              onChange={(e) => setOnSaleOnly(e.target.checked)}
+            />
+            العروض والخصومات
+          </label>
+        </div>
+      ) : null}
+
       {error ? <div className="error">{error}</div> : null}
-      <ProductGrid products={sorted} />
+      <ProductGrid products={filtered} />
     </section>
   );
 }
 
 export function CategoriesPage() {
-  const tiles = [
-    {
-      to: '/category/underwear',
-      title: 'ملابس داخلية',
-      image:
-        'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=700&q=80',
-    },
-    {
-      to: '/category/lingerie',
-      title: 'لانجري',
-      image:
-        'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=700&q=80',
-    },
-    {
-      to: '/category/wigs',
-      title: 'باروكات',
-      image:
-        'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=700&q=80',
-    },
-    {
-      to: '/category/robes',
-      title: 'أرواب',
-      image:
-        'https://images.unsplash.com/photo-1583292650898-7d22cd27ca6f?auto=format&fit=crop&w=700&q=80',
-    },
-    {
-      to: '/new',
-      title: 'وصل حديثاً',
-      image:
-        'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80',
-    },
-    {
-      to: '/offers',
-      title: 'عروض خاصة',
-      offer: true,
-      subtitle: 'اكتشفي أحدث التخفيضات',
-    },
-    {
-      to: '/bestseller',
-      title: 'الأكثر مبيعاً',
-      image:
-        'https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=700&q=80',
-    },
-  ];
+  const categories = useStoreCategories();
 
   return (
     <section className="container section">
@@ -197,20 +216,39 @@ export function CategoriesPage() {
         </Link>
       </div>
       <div className="cat-grid">
-        {tiles.map((t) =>
-          t.offer ? (
-            <Link key={t.to} to={t.to} className="cat-tile offer-tile">
-              <h3>{t.title}</h3>
-              <p>{t.subtitle}</p>
-            </Link>
-          ) : (
-            <Link key={t.to} to={t.to} className="cat-tile">
-              <div className="bg" style={{ backgroundImage: `url('${t.image}')` }} />
-              <div className="veil" />
-              <h3>{t.title}</h3>
-            </Link>
-          ),
-        )}
+        {categories.map((c) => (
+          <Link key={c.id} to={`/category/${c.slug}`} className="cat-tile">
+            <div className="bg" style={{ backgroundImage: `url('${categoryImage(c.slug)}')` }} />
+            <div className="veil" />
+            <h3>{c.nameAr}</h3>
+          </Link>
+        ))}
+        <Link to="/new" className="cat-tile">
+          <div
+            className="bg"
+            style={{
+              backgroundImage:
+                "url('https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80')",
+            }}
+          />
+          <div className="veil" />
+          <h3>وصل حديثاً</h3>
+        </Link>
+        <Link to="/offers" className="cat-tile offer-tile">
+          <h3>عروض خاصة</h3>
+          <p>اكتشفي أحدث التخفيضات</p>
+        </Link>
+        <Link to="/bestseller" className="cat-tile">
+          <div
+            className="bg"
+            style={{
+              backgroundImage:
+                "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=700&q=80')",
+            }}
+          />
+          <div className="veil" />
+          <h3>الأكثر مبيعاً</h3>
+        </Link>
       </div>
     </section>
   );

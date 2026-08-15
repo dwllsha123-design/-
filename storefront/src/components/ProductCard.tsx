@@ -1,57 +1,127 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { money, type StoreProduct } from '../api/client';
-import { useFavorites } from '../cart/CartContext';
+import { useCart, useFavorites } from '../cart/CartContext';
+
+const SIZE_LIMIT = 4;
+const COLOR_LIMIT = 5;
 
 export function ProductCard({ product }: { product: StoreProduct }) {
   const fav = useFavorites();
+  const { add } = useCart();
+  const [added, setAdded] = useState(false);
   const img =
-    product.images.find((i) => i.isPrimary)?.url ||
-    product.images[0]?.url ||
-    'https://picsum.photos/seed/fallback/600/750';
+    product.images.find((i) => i.isPrimary)?.url || product.images[0]?.url || '';
 
   const isNew =
-    product.createdAt &&
-    Date.now() - new Date(product.createdAt).getTime() < 1000 * 60 * 60 * 24 * 30;
+    Boolean(product.createdAt) &&
+    Date.now() - new Date(product.createdAt as string).getTime() < 1000 * 60 * 60 * 24 * 30;
+
+  const stockVariant = product.variants.find((v) => v.inStock);
+  const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))] as string[];
+  const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[];
+
+  function quickAdd() {
+    if (!stockVariant) return;
+    add({
+      variantId: stockVariant.id,
+      productId: product.id,
+      nameAr: product.nameAr,
+      image: img || undefined,
+      color: stockVariant.color,
+      size: stockVariant.size,
+      quantity: 1,
+      unitPrice: stockVariant.retailPrice || product.retailPrice,
+    });
+    setAdded(true);
+    window.setTimeout(() => setAdded(false), 1600);
+  }
 
   return (
-    <article className="product-card">
+    <article className={`product-card${!product.inStock ? ' is-out' : ''}`}>
       <div className="thumb">
-        <Link to={`/product/${product.id}`}>
-          {product.discountPercent > 0 ? (
-            <span className="badge-sale">-{product.discountPercent}%</span>
-          ) : isNew ? (
-            <span className="badge-new">جديد</span>
-          ) : null}
-          <img src={img} alt={product.nameAr} loading="lazy" />
+        <Link to={`/product/${product.id}`} className="thumb-link" aria-label={product.nameAr}>
+          {img ? (
+            <img src={img} alt={product.nameAr} loading="lazy" />
+          ) : (
+            <div className="thumb-ph" aria-hidden>
+              <span className="material-symbols-outlined">checkroom</span>
+            </div>
+          )}
         </Link>
+        <div className="card-badges">
+          {product.discountPercent > 0 ? (
+            <span className="badge-sale">خصم {product.discountPercent}%</span>
+          ) : null}
+          {isNew && product.discountPercent <= 0 ? <span className="badge-new">جديد</span> : null}
+        </div>
+        {!product.inStock ? (
+          <div className="unavailable-mark" aria-label="غير متوفر">
+            <span>غير متوفر</span>
+          </div>
+        ) : null}
         <button
           className={`fav-btn${fav.has(product.id) ? ' on' : ''}`}
           type="button"
-          aria-label="المفضلة"
+          aria-label={fav.has(product.id) ? 'إزالة من المفضلة' : 'إضافة للمفضلة'}
           onClick={() => fav.toggle(product.id)}
         >
           <span className={`material-symbols-outlined${fav.has(product.id) ? ' filled' : ''}`}>
             favorite
           </span>
         </button>
-        <Link className="quick-add" to={`/product/${product.id}`}>
-          إضافة سريعة
-        </Link>
       </div>
+
       <div className="body">
         <Link to={`/product/${product.id}`} className="name">
           {product.nameAr}
         </Link>
+
+        {sizes.length ? (
+          <div className="card-meta" aria-label="المقاسات">
+            {sizes.slice(0, SIZE_LIMIT).map((s) => (
+              <span key={s} className="card-chip">
+                {s}
+              </span>
+            ))}
+            {sizes.length > SIZE_LIMIT ? (
+              <span className="card-chip more">+{sizes.length - SIZE_LIMIT}</span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {colors.length ? (
+          <div className="card-meta colors" aria-label="الألوان">
+            {colors.slice(0, COLOR_LIMIT).map((c) => (
+              <span key={c} className="card-chip color" title={c}>
+                {c}
+              </span>
+            ))}
+            {colors.length > COLOR_LIMIT ? (
+              <span className="card-chip more">+{colors.length - COLOR_LIMIT}</span>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="price-row">
-          {product.compareAtPrice ? (
-            <span className="compare">{money(product.compareAtPrice)}</span>
-          ) : null}
           <span className="price">
             {Number(product.retailPrice).toFixed(0)}
             <span className="cur">د.ل</span>
           </span>
+          {product.compareAtPrice ? (
+            <span className="compare">{money(product.compareAtPrice)}</span>
+          ) : null}
         </div>
-        {!product.inStock ? <div className="stock-out">غير متوفر</div> : null}
+
+        {stockVariant ? (
+          <button className="card-add" type="button" onClick={quickAdd}>
+            {added ? 'تمت الإضافة' : 'إضافة إلى السلة'}
+          </button>
+        ) : (
+          <Link className="card-add ghost" to={`/product/${product.id}`}>
+            عرض التفاصيل
+          </Link>
+        )}
       </div>
     </article>
   );

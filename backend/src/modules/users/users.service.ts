@@ -162,14 +162,7 @@ export class UsersService {
       },
     });
 
-    await this.notifications.notifyRole('super_admin', {
-      titleAr: `مسوق جديد بانتظار الموافقة: ${user.name}`,
-      bodyAr: `هاتف: ${user.phone}${dto.city ? ` — ${dto.city}` : ' — طرابلس'}`,
-      type: 'MARKETER_PENDING',
-      entityType: 'User',
-      entityId: user.id,
-    });
-    await this.notifications.notifyRole('admin', {
+    await this.notifications.notifyAdmins({
       titleAr: `مسوق جديد بانتظار الموافقة: ${user.name}`,
       bodyAr: `هاتف: ${user.phone}${dto.city ? ` — ${dto.city}` : ' — طرابلس'}`,
       type: 'MARKETER_PENDING',
@@ -240,6 +233,13 @@ export class UsersService {
         entityType: 'User',
         entityId: id,
       },
+    });
+    await this.notifications.notifyUsers([id], {
+      titleAr: 'لم تتم الموافقة على طلب التسجيل',
+      bodyAr: 'يمكنك التواصل مع الإدارة لمزيد من التفاصيل.',
+      type: 'MARKETER_REJECTED',
+      entityType: 'User',
+      entityId: id,
     });
     return updated;
   }

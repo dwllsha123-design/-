@@ -71,7 +71,7 @@ export function ReservationsPage() {
     <div className="stack">
       <div className="page-title">
         <h1>حجوزات المخزون</h1>
-        <p>المخزون مركزي — الحجز يقلل المتاح دون إنشاء مخزون منفصل</p>
+        <p>من هنا تحجزين كمية لمنتَج حتى لا تُباع لزبون آخر قبل تأكيد الطلب. الحجز يقلل المتاح مؤقتاً من نفس المخزون المركزي.</p>
       </div>
 
       <form className="panel form-grid two" onSubmit={create}>

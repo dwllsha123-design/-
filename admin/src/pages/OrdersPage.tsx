@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api, money, sourceLabel, statusBadgeClass, statusLabel } from '../api/client';
 
 type Order = {
@@ -14,6 +14,7 @@ type Order = {
   createdAt: string;
   pagePublicCode?: number | null;
   facebookPage?: { id: string; name: string; publicCode?: number } | null;
+  deliveries?: Array<{ id: string; shippingSlipNo?: string | null; status: string }>;
 };
 
 type Page = { id: string; name: string; publicCode: number };
@@ -29,6 +30,8 @@ const STATUS_TABS = [
 ];
 
 export function OrdersPage() {
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get('focus') || '';
   const [orders, setOrders] = useState<Order[]>([]);
   const [pages, setPages] = useState<Page[]>([]);
   const [error, setError] = useState('');
@@ -54,6 +57,14 @@ export function OrdersPage() {
       .catch((e) => setError(e.message));
   }, [status, source, facebookPageId]);
 
+  useEffect(() => {
+    if (!focusId) return;
+    const el = document.getElementById(`order-row-${focusId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focusId, orders]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return orders;
@@ -75,7 +86,7 @@ export function OrdersPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>إدارة الطلبات</h1>
-          <p>تصفية حسب المصدر والصفحة وحالة التنفيذ</p>
+          <p>من هنا تتابعين كل الطلبات (المتجر، فيسبوك، نقطة البيع): حالة الطلب، اسم الزبون، والمصدر. استخدمي الفلاتر للبحث، و«إضافة طلب جديد» لتسجيل طلب فيسبوك يدوياً.</p>
         </div>
         <Link className="btn" to="/orders/new">
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
@@ -166,11 +177,16 @@ export function OrdersPage() {
                 <th>الحالة</th>
                 <th>المبلغ</th>
                 <th>التاريخ</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((o) => (
-                <tr key={o.id}>
+                <tr
+                  key={o.id}
+                  id={`order-row-${o.id}`}
+                  className={focusId === o.id ? 'row-focus' : undefined}
+                >
                   <td style={{ fontWeight: 600, color: 'var(--primary-container)' }}>
                     {o.orderNumber}
                   </td>
@@ -191,19 +207,34 @@ export function OrdersPage() {
                   </td>
                   <td>{o.city || '—'}</td>
                   <td>
-                    <span className={statusBadgeClass(o.status)}>
-                      {statusLabel[o.status] || o.status}
+                    <span
+                      className={statusBadgeClass(
+                        o.deliveries?.[0]?.status === 'FAILED' ? 'FAILED' : o.status,
+                      )}
+                    >
+                      {o.deliveries?.[0]?.status === 'FAILED'
+                        ? statusLabel.FAILED
+                        : statusLabel[o.status] || o.status}
                     </span>
                   </td>
                   <td>{money(o.totalAmount)}</td>
                   <td style={{ color: 'var(--on-surface-variant)', fontSize: 13 }}>
                     {new Date(o.createdAt).toLocaleString('ar-LY')}
                   </td>
+                  <td>
+                    <Link
+                      className="btn secondary"
+                      to={`/delivery/print?orderIds=${o.id}`}
+                      target="_blank"
+                    >
+                      طباعة البوليصة
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {!filtered.length ? (
                 <tr>
-                  <td colSpan={8} className="empty">
+                  <td colSpan={9} className="empty">
                     لا توجد طلبات مطابقة
                   </td>
                 </tr>

@@ -117,7 +117,7 @@ export function InventoryPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>إدارة المخزون</h1>
-          <p>نظرة عامة على حالة المخزون وحركة الأصناف</p>
+          <p>من هنا تدخلين كمية كل منتج بعد إضافته في صفحة المنتجات، وتشوفين المتوفر والقريب من النفاد. بدون كمية هنا لن يظهر المنتج متاحاً للبيع.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <button className="btn secondary" type="button" onClick={() => setShowAdjust((v) => !v)}>

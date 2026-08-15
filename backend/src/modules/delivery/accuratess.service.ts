@@ -2,8 +2,16 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DeliveryStatus } from '@prisma/client';
 
+export type AccuratessAccountCreds = {
+  apiToken: string;
+  endpoint?: string | null;
+  senderZoneId?: string | null;
+  senderSubzoneId?: string | null;
+};
+
 export type AccuratessShipmentPayload = {
   orderNumber: string;
+  senderName?: string;
   recipientName: string;
   recipientPhone: string;
   recipientMobile?: string;
@@ -16,6 +24,8 @@ export type AccuratessShipmentPayload = {
   sourcePage: string;
   sourcePageCode?: number | null;
   description?: string;
+  /** حساب الصفحة الفرعية — إن وُجد يتجاوز التوكن العام */
+  account?: AccuratessAccountCreds | null;
 };
 
 @Injectable()
@@ -24,26 +34,36 @@ export class AccuratessService {
 
   constructor(private readonly config: ConfigService) {}
 
-  isConfigured() {
+  isConfigured(account?: AccuratessAccountCreds | null) {
+    if (account?.apiToken) return true;
     return Boolean(
       this.config.get<string>('ACCURATESS_ENABLED') === 'true' &&
         this.config.get<string>('ACCURATESS_TOKEN'),
     );
   }
 
-  endpoint() {
+  endpoint(account?: AccuratessAccountCreds | null) {
     return (
+      account?.endpoint ||
       this.config.get<string>('ACCURATESS_ENDPOINT') ||
       'https://mayar.lg.accuratess.com:8443/graphql'
     );
   }
 
+  private resolveToken(account?: AccuratessAccountCreds | null) {
+    return account?.apiToken || this.config.get<string>('ACCURATESS_TOKEN') || '';
+  }
+
   private async gql<T>(
     query: string,
     variables?: Record<string, unknown>,
+    account?: AccuratessAccountCreds | null,
   ): Promise<{ data?: T; errors?: Array<{ message: string }> }> {
-    const token = this.config.get<string>('ACCURATESS_TOKEN')!;
-    const res = await fetch(this.endpoint(), {
+    const token = this.resolveToken(account);
+    if (!token) {
+      return { errors: [{ message: 'لا يوجد مفتاح Accuratess' }] };
+    }
+    const res = await fetch(this.endpoint(account), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,13 +77,14 @@ export class AccuratessService {
 
   /**
    * يرسل الشحنة إلى Accuratess GraphQL (saveShipment)
-   * مرجع الصفحة يُمرَّر عبر refNumber + notes
+   * يدعم مفتاح حساب لكل صفحة فرعية عبر payload.account
    */
   async saveShipment(payload: AccuratessShipmentPayload) {
-    if (!this.isConfigured()) {
+    if (!this.isConfigured(payload.account)) {
       return {
         skipped: true,
-        reason: 'ACCURATESS غير مفعّل — عيّن ACCURATESS_ENABLED=true و ACCURATESS_TOKEN',
+        reason:
+          'ACCURATESS غير مفعّل أو لا يوجد مفتاح للحساب — عيّن توكن الصفحة أو ACCURATESS_TOKEN',
       };
     }
 
@@ -72,6 +93,7 @@ export class AccuratessService {
       : payload.sourcePage;
 
     const input: Record<string, unknown> = {
+      senderName: payload.senderName || payload.sourcePage,
       recipientName: payload.recipientName,
       recipientPhone: payload.recipientPhone,
       recipientMobile: payload.recipientMobile || payload.recipientPhone,
@@ -81,14 +103,14 @@ export class AccuratessService {
       price: payload.price,
       notes: [
         payload.notes,
-        `source_page=${sourceLabel}`,
+        `الراسل=${sourceLabel}`,
         `reference=${payload.orderNumber}`,
       ]
         .filter(Boolean)
         .join(' | '),
       description:
         payload.description ||
-        `طلب ${payload.orderNumber} — مصدر الصفحة: ${sourceLabel}`,
+        `طلب ${payload.orderNumber} — الراسل: ${sourceLabel}`,
       refNumber: `PAGE:${sourceLabel}|ORD:${payload.orderNumber}`,
     };
 
@@ -96,8 +118,12 @@ export class AccuratessService {
       input.notes = `${input.notes} | delivery_fee=${payload.deliveryFees}`;
     }
 
-    const senderZoneId = this.config.get<string>('ACCURATESS_SENDER_ZONE_ID');
-    const senderSubzoneId = this.config.get<string>('ACCURATESS_SENDER_SUBZONE_ID');
+    const senderZoneId =
+      payload.account?.senderZoneId ||
+      this.config.get<string>('ACCURATESS_SENDER_ZONE_ID');
+    const senderSubzoneId =
+      payload.account?.senderSubzoneId ||
+      this.config.get<string>('ACCURATESS_SENDER_SUBZONE_ID');
     const recipientZoneId = this.config.get<string>('ACCURATESS_DEFAULT_RECIPIENT_ZONE_ID');
     const recipientSubzoneId = this.config.get<string>(
       'ACCURATESS_DEFAULT_RECIPIENT_SUBZONE_ID',
@@ -125,6 +151,7 @@ export class AccuratessService {
       const json = await this.gql<{ saveShipment?: Record<string, unknown> }>(
         query,
         { input },
+        payload.account,
       );
 
       if (json.errors?.length) {
@@ -141,9 +168,8 @@ export class AccuratessService {
     }
   }
 
-  /** جلب حالة شحنة Accuratess بالكود */
-  async getShipment(code: string) {
-    if (!this.isConfigured()) {
+  async getShipment(code: string, account?: AccuratessAccountCreds | null) {
+    if (!this.isConfigured(account)) {
       return {
         skipped: true,
         reason: 'ACCURATESS غير مفعّل',
@@ -173,10 +199,9 @@ export class AccuratessService {
           refNumber?: string;
           notes?: string;
         };
-      }>(query, { code });
+      }>(query, { code }, account);
 
       if (json.errors?.length) {
-        // fallback: findShipments
         const alt = `
           query Find($code: String!) {
             findShipments(input: { code: $code }) {
@@ -196,7 +221,7 @@ export class AccuratessService {
             status?: string;
             trackingUrl?: string;
           }>;
-        }>(alt, { code });
+        }>(alt, { code }, account);
         if (altJson.errors?.length) {
           return {
             ok: false,
@@ -217,8 +242,9 @@ export class AccuratessService {
   mapRemoteStatus(remote?: string | null): DeliveryStatus | null {
     if (!remote) return null;
     const s = remote.toString().toLowerCase().replace(/\s+/g, '_');
-    if (/(deliver|تم_التسليم|delivered|completed)/.test(s)) return 'DELIVERED';
+    if (/(fail|تعذر|undeliver|unable|not_deliver|failed)/.test(s)) return 'FAILED';
     if (/(cancel|ملغي|cancelled|canceled)/.test(s)) return 'FAILED';
+    if (/(deliver|تم_التسليم|delivered|completed)/.test(s)) return 'DELIVERED';
     if (/(return|مرتجع|returned)/.test(s)) return 'RETURNED';
     if (/(transit|out|قيد|in_transit|shipping|on_way)/.test(s)) return 'IN_TRANSIT';
     if (/(pick|استلام|picked)/.test(s)) return 'PICKED_UP';

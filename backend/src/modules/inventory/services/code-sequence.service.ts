@@ -53,8 +53,19 @@ export class CodeSequenceService {
   }
 
   variantBarcodeFromParts(sku: string, seq: number) {
-    const clean = sku.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8) || 'SKU';
-    return `DA-${clean}-${String(seq).padStart(6, '0')}`;
+    const clean = sku.replace(/[^A-Z0-9-]/gi, '').toUpperCase();
+    // إذا كان الكود بالفعل بنمط DA-xxxx استخدمه كباركود مباشرة
+    if (/^DA-\d{4,}(-\w+)?$/i.test(clean)) {
+      return clean;
+    }
+    const base = clean.slice(0, 8) || 'SKU';
+    return `DA-${base}-${String(seq).padStart(6, '0')}`;
+  }
+
+  /** كود صنف فريد: DA-1001, DA-1002, ... */
+  async nextSku(tx?: Prisma.TransactionClient): Promise<string> {
+    const n = await this.nextCode('product_sku_da', 1001, tx);
+    return `DA-${String(n).padStart(4, '0')}`;
   }
 
   orderBarcodeFromNumber(orderNumber: string) {

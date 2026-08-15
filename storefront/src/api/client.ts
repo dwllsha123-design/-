@@ -19,10 +19,8 @@ export type StoreProduct = {
     size?: string | null;
     nameAr?: string | null;
     retailPrice: number;
-    available: number;
     inStock: boolean;
   }>;
-  available: number;
   inStock: boolean;
   createdAt?: string;
   soldCount?: number;
@@ -48,9 +46,22 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (t) headers.set('Authorization', `Bearer ${t}`);
 
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
-  const json = (await res.json()) as ApiResponse<T>;
-  if (!res.ok) {
-    throw new Error(json.message || 'حدث خطأ');
+  const text = await res.text();
+  let json: ApiResponse<T> | null = null;
+  if (text) {
+    try {
+      json = JSON.parse(text) as ApiResponse<T>;
+    } catch {
+      throw new Error('تعذر قراءة رد الخادم');
+    }
+  }
+  if (!res.ok || !json) {
+    throw new Error(
+      json?.message ||
+        (res.status >= 500
+          ? 'تعذر الاتصال بالخادم. تأكدي أن النظام يعمل ثم أعيدي المحاولة.'
+          : 'حدث خطأ'),
+    );
   }
   if (json && typeof json === 'object' && 'data' in json) return json.data as T;
   return json as T;

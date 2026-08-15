@@ -40,5 +40,6 @@ yarn-error.log*
 *.swp
 .cursor/
 
-# OS
-Desktop.ini
+# Uploaded product images
+backend/uploads/
+uploads/

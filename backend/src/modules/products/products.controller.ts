@@ -1,15 +1,26 @@
 import {
+  BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { join } from 'path';
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
-import { CreateProductDto, UpdateProductDto } from './dto/product.dto';
+import {
+  AddProductImageDto,
+  CreateProductDto,
+  CreateVariantDto,
+  UpdateProductDto,
+} from './dto/product.dto';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
 import {
@@ -49,5 +60,45 @@ export class ProductsController {
     @Body() dto: UpdateProductDto,
   ) {
     return this.productsService.update(user, id, dto);
+  }
+
+  @Post(':id/variants')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  addVariant(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: CreateVariantDto,
+  ) {
+    return this.productsService.addVariant(user, id, dto);
+  }
+
+  @Post(':id/images')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  addImage(@Param('id') id: string, @Body() dto: AddProductImageDto) {
+    return this.productsService.addImage(id, dto.url, dto.isPrimary);
+  }
+
+  @Post(':id/images/upload')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: join(process.cwd(), 'uploads', 'products'),
+      limits: { fileSize: 6 * 1024 * 1024 },
+    }),
+  )
+  uploadImage(
+    @Param('id') id: string,
+    @UploadedFile()
+    file?: { filename: string; originalname: string; mimetype: string; buffer?: Buffer },
+  ) {
+    if (!file?.filename && !file?.buffer) throw new BadRequestException('اختاري صورة للرفع');
+    return this.productsService.uploadImage(id, file);
+  }
+
+  @Delete(':id/images/:imageId')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  removeImage(@Param('id') id: string, @Param('imageId') imageId: string) {
+    return this.productsService.removeImage(id, imageId);
   }
 }

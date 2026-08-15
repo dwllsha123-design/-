@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -49,6 +50,39 @@ export class UpdateFacebookPageDto {
   @IsOptional()
   @IsString()
   managerId?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpsertShippingAccountDto {
+  @IsOptional()
+  @IsString()
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  pageIdentifier?: string;
+
+  @IsString()
+  apiToken!: string;
+
+  @IsOptional()
+  @IsString()
+  endpoint?: string;
+
+  @IsOptional()
+  @IsString()
+  senderZoneId?: string;
+
+  @IsOptional()
+  @IsString()
+  senderSubzoneId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 
   @IsOptional()
   @IsString()

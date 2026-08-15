@@ -12,6 +12,11 @@ import {
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  @Get('unread-count')
+  unreadCount(@CurrentUser() user: AuthUser) {
+    return this.notificationsService.unreadCount(user);
+  }
+
   @Get()
   list(
     @CurrentUser() user: AuthUser,
@@ -20,13 +25,13 @@ export class NotificationsController {
     return this.notificationsService.list(user, unread === '1');
   }
 
-  @Post(':id/read')
-  markRead(@CurrentUser() user: AuthUser, @Param('id') id: string) {
-    return this.notificationsService.markRead(user, id);
-  }
-
   @Post('read-all')
   markAll(@CurrentUser() user: AuthUser) {
     return this.notificationsService.markAllRead(user);
+  }
+
+  @Post(':id/read')
+  markRead(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.notificationsService.markRead(user, id);
   }
 }

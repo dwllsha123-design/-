@@ -18,16 +18,27 @@ type Quote = {
   mode: string;
 };
 
+type Profile = {
+  name?: string;
+  phone?: string | null;
+  customer?: {
+    city?: string | null;
+    area?: string | null;
+    landmark?: string | null;
+  } | null;
+};
+
 export function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const attr = getAttributionMeta();
   const [name, setName] = useState(user?.name || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [cities, setCities] = useState<DeliveryCity[]>([]);
+  const [notesMap, setNotesMap] = useState<{ internal?: string; external?: string }>({});
   const [city, setCity] = useState('طرابلس');
   const [area, setArea] = useState('');
-  const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('COD');
@@ -39,9 +50,12 @@ export function CheckoutPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<{ cities: DeliveryCity[] }>('/store/delivery-options')
+    api<{ cities: DeliveryCity[]; notes?: { internal?: string; external?: string } }>(
+      '/store/delivery-options',
+    )
       .then((d) => {
         setCities(d.cities || []);
+        setNotesMap(d.notes || {});
         const first = d.cities?.[0];
         if (first) {
           setCity(first.nameAr);
@@ -50,6 +64,27 @@ export function CheckoutPage() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!user || !cities.length) return;
+    setName((prev) => prev || user.name || '');
+    setPhone((prev) => prev || user.phone || '');
+    api<Profile>('/store/me')
+      .then((me) => {
+        if (me.name) setName(me.name);
+        if (me.phone) setPhone(me.phone);
+        const c = me.customer;
+        if (!c) return;
+        if (c.city && cities.some((x) => x.nameAr === c.city)) {
+          setCity(c.city);
+          const found = cities.find((x) => x.nameAr === c.city);
+          if (c.area && found?.areas.includes(c.area)) setArea(c.area);
+          else setArea(found?.areas[0] || '');
+        }
+        if (c.landmark) setLandmark(c.landmark);
+      })
+      .catch(() => undefined);
+  }, [user, cities]);
 
   const areas = useMemo(
     () => cities.find((c) => c.nameAr === city)?.areas || [],
@@ -70,6 +105,23 @@ export function CheckoutPage() {
   }
 
   const deliveryFee = quote?.deliveryFee ?? 0;
+  const deliveryNote =
+    quote?.deliveryType === 'INTERNAL' ? notesMap.internal : notesMap.external;
+
+  async function applyPromo() {
+    setPromoMsg('');
+    try {
+      const res = await api<{ discount: number; code: string }>('/store/promo/validate', {
+        method: 'POST',
+        body: JSON.stringify({ code: promoCode, subtotal }),
+      });
+      setDiscount(res.discount);
+      setPromoMsg(`تم تطبيق الخصم: ${money(res.discount)}`);
+    } catch (err) {
+      setDiscount(0);
+      setPromoMsg(err instanceof Error ? err.message : 'كود غير صالح');
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,6 +136,9 @@ export function CheckoutPage() {
         id: string;
         orderNumber: string;
         totalAmount: number;
+        subtotal: number;
+        deliveryFee: number;
+        discountAmount: number;
         status: string;
         deliveryType: string;
       }>('/store/checkout', {
@@ -93,13 +148,12 @@ export function CheckoutPage() {
           phone,
           city,
           area,
-          address,
           landmark,
           notes,
           paymentMethod,
-          attributionToken: getAttributionMeta().token,
-          pagePublicCode: getAttributionMeta().pagePublicCode,
-          agentPublicCode: getAttributionMeta().agentPublicCode,
+          attributionToken: attr.token,
+          pagePublicCode: attr.pagePublicCode,
+          agentPublicCode: attr.agentPublicCode,
           promoCode: promoCode || undefined,
           items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
         }),
@@ -142,7 +196,6 @@ export function CheckoutPage() {
             {cities.map((c) => (
               <option key={c.nameAr} value={c.nameAr}>
                 {c.nameAr}
-                {c.deliveryType === 'INTERNAL' ? ' (مندوبينا)' : ' (شركة توصيل)'}
               </option>
             ))}
           </select>
@@ -157,10 +210,6 @@ export function CheckoutPage() {
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          العنوان
-          <input value={address} onChange={(e) => setAddress(e.target.value)} required />
         </label>
         <label>
           أقرب نقطة دالة
@@ -178,36 +227,27 @@ export function CheckoutPage() {
           ملاحظات
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} />
         </label>
-        <label>
-          كود الخصم
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input value={promoCode} onChange={(e) => setPromoCode(e.target.value)} />
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={async () => {
-                setPromoMsg('');
-                try {
-                  const res = await api<{ discount: number; code: string }>(
-                    '/store/promo/validate',
-                    {
-                      method: 'POST',
-                      body: JSON.stringify({ code: promoCode, subtotal }),
-                    },
-                  );
-                  setDiscount(res.discount);
-                  setPromoMsg(`تم تطبيق الخصم: ${money(res.discount)}`);
-                } catch (err) {
-                  setDiscount(0);
-                  setPromoMsg(err instanceof Error ? err.message : 'كود غير صالح');
-                }
-              }}
-            >
-              تطبيق
-            </button>
-          </div>
+        <div className="promo-row" style={{ gridColumn: '1 / -1' }}>
+          <label style={{ flex: 1 }}>
+            كود الخصم
+            <div className="promo-apply">
+              <input
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value)}
+                placeholder="أدخلي الكود إن وُجد"
+              />
+              <button className="btn secondary" type="button" onClick={() => void applyPromo()}>
+                تطبيق
+              </button>
+            </div>
+          </label>
           {promoMsg ? <div className="muted" style={{ fontSize: 13 }}>{promoMsg}</div> : null}
-        </label>
+        </div>
+        {deliveryNote ? (
+          <div className="muted" style={{ gridColumn: '1 / -1', fontSize: 13 }}>
+            {deliveryNote}
+          </div>
+        ) : null}
         <div style={{ gridColumn: '1 / -1' }} className="panel">
           <div>المجموع: {money(subtotal)}</div>
           {discount ? <div>الخصم: −{money(discount)}</div> : null}
