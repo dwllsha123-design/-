@@ -338,7 +338,7 @@ export function ProductsPage() {
             <input value={brand} onChange={(e) => setBrand(e.target.value)} />
           </label>
           <label style={{ gridColumn: '1 / -1' }}>
-            صور المنتج — ارفعي من جهازك
+            صور المنتج — ارفعي من جهازك (الأفضل 900×1200 بنسبة 3:4 كما في الرئيسية)
             <input
               type="file"
               accept="image/*"

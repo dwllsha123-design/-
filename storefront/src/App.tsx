@@ -19,6 +19,7 @@ import {
   ContentPage,
 } from './pages/AccountPages';
 import { captureAttributionFromUrl } from './api/client';
+import { ThemeProvider } from './theme/ThemeContext';
 
 function AttributionCapture() {
   const location = useLocation();
@@ -30,11 +31,12 @@ function AttributionCapture() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <AttributionCapture />
-        <Routes>
-          <Route element={<StoreLayout />}>
+    <ThemeProvider>
+      <AuthProvider>
+        <CartProvider>
+          <AttributionCapture />
+          <Routes>
+            <Route element={<StoreLayout />}>
             <Route index element={<HomePage />} />
             <Route path="products" element={<CatalogPage mode="all" />} />
             <Route path="categories" element={<CategoriesPage />} />
@@ -125,5 +127,6 @@ export default function App() {
         </Routes>
       </CartProvider>
     </AuthProvider>
+    </ThemeProvider>
   );
 }

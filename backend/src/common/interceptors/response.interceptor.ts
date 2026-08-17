@@ -8,7 +8,9 @@ import { Observable, map } from 'rxjs';
 
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
-  intercept(_context: ExecutionContext, next: CallHandler): Observable<unknown> {
+  intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const res = context.switchToHttp().getResponse<{ setHeader: (k: string, v: string) => void }>();
+    res.setHeader('X-Api-Version', 'v1');
     return next.handle().pipe(
       map((data) => {
         if (
@@ -16,6 +18,9 @@ export class ResponseInterceptor implements NestInterceptor {
           typeof data === 'object' &&
           'success' in (data as Record<string, unknown>)
         ) {
+          return data;
+        }
+        if (data === undefined) {
           return data;
         }
         return {

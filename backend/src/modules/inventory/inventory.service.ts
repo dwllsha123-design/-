@@ -140,11 +140,7 @@ export class InventoryService {
   }
 
   async getAvailable(variantId: string, warehouseId?: string) {
-    const result = await this.central.getAvailability(variantId, warehouseId);
-    if (!result.items.length) {
-      throw new NotFoundException('لا يوجد مخزون لهذا الصنف');
-    }
-    return result;
+    return this.central.getAvailability(variantId, warehouseId);
   }
 
   listMovements(limit = 100) {

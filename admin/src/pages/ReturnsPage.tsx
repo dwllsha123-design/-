@@ -1,5 +1,7 @@
 import { FormEvent, useState } from 'react';
+import { Navigate } from 'react-router-dom';
 import { api } from '../api/client';
+import { BarcodeScanner } from '../components/BarcodeScanner';
 
 type ScanResult = {
   id: string;
@@ -16,26 +18,33 @@ type ScanResult = {
   }>;
 };
 
-export function ReturnsPage() {
+export function ReturnToStockPanel() {
   const [barcode, setBarcode] = useState('');
   const [order, setOrder] = useState<ScanResult | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const [scanOn, setScanOn] = useState(false);
 
-  async function scan(e: FormEvent) {
-    e.preventDefault();
+  async function lookup(code: string) {
     setError('');
     setMessage('');
     try {
-      const data = await api<ScanResult>(`/returns/scan/${encodeURIComponent(barcode.trim())}`);
+      const data = await api<ScanResult>(`/returns/scan/${encodeURIComponent(code.trim())}`);
+      setBarcode(code.trim());
       setOrder(data);
       if (data.alreadyReturned) {
         setError('تم إرجاع هذا الطلب إلى المخزون مسبقًا.');
       }
+      setScanOn(false);
     } catch (err) {
       setOrder(null);
       setError(err instanceof Error ? err.message : 'فشل المسح');
     }
+  }
+
+  async function scan(e: FormEvent) {
+    e.preventDefault();
+    await lookup(barcode);
   }
 
   async function returnToStock() {
@@ -58,10 +67,14 @@ export function ReturnsPage() {
 
   return (
     <div className="stack">
-      <div className="page-title">
-        <h1>إرجاع للمخزون</h1>
-        <p>من هنا ترجعين القطع إلى المخزون بعد مرتجع: امسحي باركود الطلب (مثل ORD-2026-000001) ثم حددي الكميات المراد إرجاعها.</p>
-      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        امسحي باركود الطلب بالكاميرا أو أدخلية يدوياً (مثل ORD-2026-000001) ثم أرجعي القطع إلى المخزون.
+      </p>
+
+      <button className="btn secondary" type="button" onClick={() => setScanOn((v) => !v)}>
+        {scanOn ? 'إيقاف الكاميرا' : 'مسح بالكاميرا'}
+      </button>
+      {scanOn ? <BarcodeScanner active={scanOn} onDetected={(code) => void lookup(code)} /> : null}
 
       <form className="panel toolbar" onSubmit={scan}>
         <input
@@ -69,7 +82,7 @@ export function ReturnsPage() {
           onChange={(e) => setBarcode(e.target.value)}
           placeholder="ORD-...."
           style={{ flex: 1 }}
-          autoFocus
+          aria-label="باركود الطلب"
         />
         <button className="btn" type="submit">
           مسح
@@ -119,4 +132,8 @@ export function ReturnsPage() {
       ) : null}
     </div>
   );
+}
+
+export function ReturnsPage() {
+  return <Navigate to="/inventory?tab=returns" replace />;
 }

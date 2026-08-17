@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, money, sourceLabel, statusLabel } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 
 type DashboardData = {
   currency: string;
@@ -17,6 +18,22 @@ type DashboardData = {
   channelSales?: {
     online: { orders: number; sales: number };
     pos: { orders: number; sales: number };
+  };
+  inventoryValue?: {
+    productCount: number;
+    skuCount: number;
+    pieces: number;
+    costTotal: number;
+    retailTotal: number;
+    wholesaleTotal: number;
+    byBranch: Array<{
+      branchId: string;
+      branchName: string;
+      pieces: number;
+      costTotal: number;
+      retailTotal: number;
+      wholesaleTotal: number;
+    }>;
   };
   bySource: Array<{ source: string; count: number; total: number }>;
   recentOrders: Array<{
@@ -39,6 +56,7 @@ type Alert = {
 };
 
 export function DashboardPage() {
+  const { isOwner } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState('');
@@ -58,11 +76,13 @@ export function DashboardPage() {
         <div className="page-title">
           <h1>الرئيسية</h1>
           <p>
-            ملخص المنظومة: مبيعات الأونلاين مقابل نقطة البيع، المخزون المتبقي في المخزن المركزي،
-            وتنبيهات النفاد.
+            ملخص المنظومة: مبيعات الأونلاين ونقاط بيع الفروع، وقيمة المخزون للمدير العام.
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <Link className="btn secondary" to="/branches">
+            الفروع
+          </Link>
           <Link className="btn secondary" to="/inventory">
             المخزون
           </Link>
@@ -73,6 +93,65 @@ export function DashboardPage() {
       </div>
 
       {error ? <div className="error">{error}</div> : null}
+
+      {isOwner && data?.inventoryValue ? (
+        <div className="panel stack">
+          <div className="toolbar">
+            <strong>ملخص المخزون — للمدير العام</strong>
+            <Link to="/branches">إدارة الفروع</Link>
+          </div>
+          <div className="stats">
+            <div className="stat">
+              <div className="stat-label">إجمالي الأصناف الموجودة</div>
+              <div className="stat-value">{data.inventoryValue.productCount}</div>
+              <div className="stat-hint">{data.inventoryValue.skuCount} مقاس/لون له كمية</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">عدد القطع</div>
+              <div className="stat-value">{data.inventoryValue.pieces}</div>
+              <div className="stat-hint">مجموع الكميات في كل الفروع</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">إجمالي التكلفة</div>
+              <div className="stat-value">{money(data.inventoryValue.costTotal)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">إجمالي البيع قطاعي</div>
+              <div className="stat-value">{money(data.inventoryValue.retailTotal)}</div>
+            </div>
+            <div className="stat">
+              <div className="stat-label">إجمالي البيع جملة</div>
+              <div className="stat-value">{money(data.inventoryValue.wholesaleTotal)}</div>
+            </div>
+          </div>
+          {data.inventoryValue.byBranch.length ? (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>الفرع</th>
+                    <th>القطع</th>
+                    <th>التكلفة</th>
+                    <th>قطاعي</th>
+                    <th>جملة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.inventoryValue.byBranch.map((b) => (
+                    <tr key={b.branchId}>
+                      <td>{b.branchName}</td>
+                      <td>{b.pieces}</td>
+                      <td>{money(b.costTotal)}</td>
+                      <td>{money(b.retailTotal)}</td>
+                      <td>{money(b.wholesaleTotal)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {(data?.lowStock || 0) > 0 || alerts.length ? (
         <div className="panel" style={{ borderColor: 'var(--danger)' }}>

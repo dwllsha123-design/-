@@ -37,13 +37,7 @@ export function CartPage() {
                 <td>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     {i.image ? (
-                      <img
-                        src={i.image}
-                        alt=""
-                        width={56}
-                        height={70}
-                        style={{ objectFit: 'cover', borderRadius: 8 }}
-                      />
+                      <img src={i.image} alt="" className="cart-thumb" />
                     ) : null}
                     <Link to={`/product/${i.productId}`}>{i.nameAr}</Link>
                   </div>

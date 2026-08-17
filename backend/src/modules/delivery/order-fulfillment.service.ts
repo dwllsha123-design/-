@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { FulfillmentType, LocalOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { findDeliveryCity } from '../../common/delivery/delivery-zones';
@@ -238,16 +238,63 @@ export class OrderFulfillmentService {
     if (!courier || !courier.isActive) {
       throw new NotFoundException('المندوب غير موجود أو غير نشط');
     }
-    return this.prisma.order.update({
-      where: { id: orderId },
-      data: {
-        courierId,
-        fulfillmentType: 'INTERNAL',
-        deliveryType: 'INTERNAL',
-        localStatus: 'OUT_FOR_DELIVERY',
-        status: 'OUT_FOR_DELIVERY',
-      },
-      include: { courier: true, facebookPage: true },
+
+    const order = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new NotFoundException('الطلب غير موجود');
+    if (order.fulfillmentType === 'EXTERNAL' || order.deliveryType === 'EXTERNAL') {
+      throw new BadRequestException('طلبات خارج طرابلس تُمرَّر لشركة التوصيل ولا تُسند لمناديب محليين');
+    }
+
+    const year = new Date().getFullYear();
+    const count = await this.prisma.delivery.count({
+      where: { shippingSlipNo: { startsWith: `SLIP-${year}-` } },
+    });
+    const shippingSlipNo = `SLIP-${year}-${String(count + 1).padStart(6, '0')}`;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          courierId,
+          fulfillmentType: 'INTERNAL',
+          deliveryType: 'INTERNAL',
+          localStatus: 'IN_WAREHOUSE',
+          status: 'ASSIGNED',
+        },
+        include: { courier: true, facebookPage: true },
+      });
+
+      const existing = await tx.delivery.findFirst({
+        where: { orderId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (!existing) {
+        await tx.delivery.create({
+          data: {
+            orderId,
+            type: 'INTERNAL',
+            status: 'ASSIGNED',
+            agentId: courier.userId || undefined,
+            assignedAt: new Date(),
+            shippingSlipNo,
+            fee: order.deliveryFee,
+            notes: `مندوب طرابلس: ${courier.name}`,
+          },
+        });
+      } else {
+        await tx.delivery.update({
+          where: { id: existing.id },
+          data: {
+            type: 'INTERNAL',
+            status: 'ASSIGNED',
+            agentId: courier.userId || existing.agentId,
+            assignedAt: existing.assignedAt || new Date(),
+            notes: existing.notes || `مندوب طرابلس: ${courier.name}`,
+          },
+        });
+      }
+
+      return updated;
     });
   }
 

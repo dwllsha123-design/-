@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { PushService } from '../mobile/push.service';
 
 export type NotifyPayload = {
   titleAr: string;
@@ -12,7 +13,10 @@ export type NotifyPayload = {
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {}
 
   list(user: AuthUser, unreadOnly = false) {
     return this.prisma.notification.findMany({
@@ -58,6 +62,17 @@ export class NotificationsService {
         entityId: payload.entityId,
       })),
     });
+    try {
+      await this.push.sendToUsers(unique, {
+        titleAr: payload.titleAr,
+        bodyAr: payload.bodyAr,
+        type: payload.type,
+        entityType: payload.entityType,
+        entityId: payload.entityId,
+      });
+    } catch {
+      // In-app notification is already saved; push is best-effort.
+    }
   }
 
   /** إدارة فقط — بدون تكرار إذا كان للمستخدم أكثر من دور إداري */

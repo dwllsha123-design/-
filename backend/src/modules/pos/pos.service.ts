@@ -9,7 +9,7 @@ import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { CreatePosReturnDto, CreatePosSaleDto } from './dto/pos.dto';
 import { CentralInventoryService } from '../inventory/services/central-inventory.service';
 import {
-  canViewWholesalePrices,
+  canSellWholesale,
   retailOf,
 } from '../../common/pricing/price-policy';
 
@@ -48,15 +48,18 @@ export class PosService {
     if (!dto.items?.length) {
       throw new BadRequestException('أضف منتجات للبيع');
     }
+    if (!user.branch?.id || !user.branch.warehouseId) {
+      throw new ForbiddenException('نقطة البيع متاحة عبر حساب الفرع فقط');
+    }
 
     const priceMode = dto.priceMode === 'WHOLESALE' ? 'WHOLESALE' : 'RETAIL';
-    if (priceMode === 'WHOLESALE' && !canViewWholesalePrices(user)) {
-      throw new ForbiddenException('بيع الجملة متاح للمالك فقط');
+    if (priceMode === 'WHOLESALE' && !canSellWholesale(user)) {
+      throw new ForbiddenException('بيع الجملة متاح للفرع الرئيسي فقط');
     }
 
     return this.inventory.withTransaction(async (tx) => {
-      const warehouseId =
-        dto.warehouseId || (await this.inventory.defaultWarehouseId(tx));
+      const warehouseId = user.branch!.warehouseId;
+      const branchId = user.branch!.id;
 
       let customerId = dto.customerId;
       if (!customerId && dto.customerPhone) {
@@ -158,6 +161,7 @@ export class PosService {
           customerId,
           cashierId: user.id,
           warehouseId,
+          branchId,
           attributionSource: `POS_${priceMode}`,
           subtotal,
           discountAmount,
@@ -222,7 +226,7 @@ export class PosService {
     });
   }
 
-  async getInvoice(orderId: string) {
+  async getInvoice(orderId: string, user?: AuthUser) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -230,9 +234,13 @@ export class PosService {
         customer: true,
         invoice: true,
         cashier: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
       },
     });
     if (!order || (order.source !== 'POS' && order.source !== 'WHOLESALE')) {
+      throw new NotFoundException('فاتورة نقطة البيع غير موجودة');
+    }
+    if (user?.branch?.id && order.branchId && order.branchId !== user.branch.id) {
       throw new NotFoundException('فاتورة نقطة البيع غير موجودة');
     }
 
@@ -243,6 +251,7 @@ export class PosService {
 
     return {
       ...order,
+      branchName: order.branch?.name || user?.branch?.name || null,
       priceMode,
       priceModeLabel: priceMode === 'WHOLESALE' ? 'جملة' : 'قطاعي',
       company: {
@@ -264,6 +273,9 @@ export class PosService {
         (order.source !== 'POS' && order.source !== 'WHOLESALE')
       ) {
         throw new NotFoundException('فاتورة نقطة البيع غير موجودة');
+      }
+      if (user.branch?.id && order.branchId && order.branchId !== user.branch.id) {
+        throw new ForbiddenException('لا يمكن إرجاع فاتورة فرع آخر');
       }
       if (order.returnedToStockAt) {
         throw new BadRequestException('تم إرجاع هذا الطلب إلى المخزون مسبقًا.');

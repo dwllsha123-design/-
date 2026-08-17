@@ -83,6 +83,21 @@ async function main() {
       ],
     },
     {
+      code: ROLE_CODES.BRANCH_CASHIER,
+      nameAr: 'كاشير الفرع',
+      nameEn: 'Branch Cashier',
+      isSystem: true,
+      permissions: [
+        PERMISSIONS.POS_SELL,
+        PERMISSIONS.POS_RETURN,
+        PERMISSIONS.ORDERS_VIEW,
+        PERMISSIONS.PRODUCTS_VIEW,
+        PERMISSIONS.CUSTOMERS_VIEW,
+        PERMISSIONS.CUSTOMERS_CREATE,
+        PERMISSIONS.INVENTORY_VIEW,
+      ],
+    },
+    {
       code: ROLE_CODES.WAREHOUSE,
       nameAr: 'موظف مخزن',
       nameEn: 'Warehouse Employee',
@@ -103,6 +118,7 @@ async function main() {
         PERMISSIONS.ORDERS_VIEW,
         PERMISSIONS.DELIVERY_ASSIGN,
         PERMISSIONS.CUSTOMERS_VIEW,
+        PERMISSIONS.INVENTORY_ADJUST,
       ],
     },
     {
@@ -170,7 +186,7 @@ async function main() {
     where: { code: ROLE_CODES.DELIVERY_AGENT },
   });
   const agentHash = await bcrypt.hash('Agent@12345', 10);
-  await prisma.user.upsert({
+  const agent = await prisma.user.upsert({
     where: { email: 'agent@dar-alunotha.ly' },
     create: {
       name: 'مندوب طرابلس',
@@ -183,6 +199,23 @@ async function main() {
     update: {
       passwordHash: agentHash,
       status: 'ACTIVE',
+    },
+  });
+
+  await prisma.courier.upsert({
+    where: { userId: agent.id },
+    create: {
+      name: 'مندوب طرابلس',
+      phone: '0920000001',
+      city: 'طرابلس',
+      isActive: true,
+      userId: agent.id,
+      notes: 'حساب تجريبي — كلمة السر Agent@12345',
+    },
+    update: {
+      isActive: true,
+      phone: '0920000001',
+      city: 'طرابلس',
     },
   });
 
@@ -212,6 +245,61 @@ async function main() {
     update: { isDefault: true, address: 'طرابلس - ليبيا' },
   });
 
+  const mainWarehouse = await prisma.warehouse.findUniqueOrThrow({
+    where: { code: 'MAIN' },
+  });
+  const branchCashierRole = await prisma.role.findUniqueOrThrow({
+    where: { code: ROLE_CODES.BRANCH_CASHIER },
+  });
+  const branchHash = await bcrypt.hash('Branch@12345', 10);
+  const mainBranchUser = await prisma.user.upsert({
+    where: { email: 'main@branch.local' },
+    create: {
+      name: 'الفرع الرئيسي',
+      email: 'main@branch.local',
+      passwordHash: branchHash,
+      locale: 'ar',
+      roles: { create: [{ roleId: branchCashierRole.id }] },
+    },
+    update: {
+      passwordHash: branchHash,
+      status: 'ACTIVE',
+      name: 'الفرع الرئيسي',
+    },
+  });
+  const existingMainBranch = await prisma.branch.findUnique({
+    where: { username: 'main' },
+  });
+  const mainBranch = existingMainBranch
+    ? await prisma.branch.update({
+        where: { username: 'main' },
+        data: {
+          name: 'الفرع الرئيسي',
+          passwordHash: branchHash,
+          type: 'WHOLESALE_RETAIL',
+          isMain: true,
+          isActive: true,
+          warehouseId: mainWarehouse.id,
+          userId: mainBranchUser.id,
+        },
+      })
+    : await prisma.branch.create({
+        data: {
+          name: 'الفرع الرئيسي',
+          username: 'main',
+          passwordHash: branchHash,
+          type: 'WHOLESALE_RETAIL',
+          isMain: true,
+          isActive: true,
+          warehouseId: mainWarehouse.id,
+          userId: mainBranchUser.id,
+        },
+      });
+  await prisma.stockItem.updateMany({
+    where: { warehouseId: mainWarehouse.id, branchId: null },
+    data: { branchId: mainBranch.id },
+  });
+
   const settings: Array<{ key: string; value: string; group: string }> = [
     { key: 'app.name', value: 'دار الأنوثة', group: 'app' },
     { key: 'app.locale', value: 'ar', group: 'app' },
@@ -227,6 +315,22 @@ async function main() {
     { key: 'company.address', value: 'طرابلس - ليبيا', group: 'company' },
     { key: 'store.delivery_fee_tripoli', value: '15', group: 'store' },
     { key: 'store.delivery_fee_external', value: '35', group: 'store' },
+    { key: 'mobile.android_package', value: 'ly.daronotha.store', group: 'mobile' },
+    { key: 'mobile.ios_bundle_id', value: 'ly.daronotha.store', group: 'mobile' },
+    { key: 'mobile.ios_team_id', value: '', group: 'mobile' },
+    { key: 'mobile.android_min_version', value: '1.0.0', group: 'mobile' },
+    { key: 'mobile.ios_min_version', value: '1.0.0', group: 'mobile' },
+    { key: 'mobile.android_latest_version', value: '1.0.0', group: 'mobile' },
+    { key: 'mobile.ios_latest_version', value: '1.0.0', group: 'mobile' },
+    { key: 'mobile.android_force_update', value: 'false', group: 'mobile' },
+    { key: 'mobile.ios_force_update', value: 'false', group: 'mobile' },
+    { key: 'mobile.play_store_url', value: '', group: 'mobile' },
+    { key: 'mobile.app_store_url', value: '', group: 'mobile' },
+    { key: 'mobile.deep_link_scheme', value: 'daronotha', group: 'mobile' },
+    { key: 'mobile.universal_link_host', value: 'dar-alunotha.ly', group: 'mobile' },
+    { key: 'mobile.maintenance', value: 'false', group: 'mobile' },
+    { key: 'mobile.maintenance_message', value: '', group: 'mobile' },
+    { key: 'mobile.android_sha256_fingerprints', value: '', group: 'mobile' },
   ];
 
   for (const s of settings) {
@@ -394,6 +498,7 @@ async function main() {
         create: {
           warehouseId: warehouse.id,
           variantId: created.variants[0].id,
+          branchId: mainBranch.id,
           quantityOnHand: 15,
           quantityReserved: 0,
         },
@@ -412,6 +517,8 @@ async function main() {
   console.log('Seed complete.');
   console.log('Super Admin:', admin.email);
   console.log('Password: Admin@12345');
+  console.log('Main branch username: main');
+  console.log('Main branch password: Branch@12345');
 }
 
 main()

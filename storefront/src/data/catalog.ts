@@ -6,14 +6,10 @@ export type StoreCategory = {
 };
 
 export const CATEGORY_IMAGES: Record<string, string> = {
-  lingerie:
-    'https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?auto=format&fit=crop&w=900&q=80',
-  underwear:
-    'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?auto=format&fit=crop&w=700&q=80',
-  robes:
-    'https://images.unsplash.com/photo-1583292650898-7d22cd27ca6f?auto=format&fit=crop&w=700&q=80',
-  wigs:
-    'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=700&q=80',
+  lingerie: '/home/category.jpg',
+  underwear: '/home/product-faraa.jpg',
+  robes: '/home/product-kaftan.jpg',
+  wigs: '/home/product-kaftan-34-alt.jpg',
 };
 
 export const FALLBACK_CATEGORIES: StoreCategory[] = [
@@ -26,6 +22,6 @@ export const FALLBACK_CATEGORIES: StoreCategory[] = [
 export function categoryImage(slug: string) {
   return (
     CATEGORY_IMAGES[slug] ||
-    'https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=900&q=80'
+    '/home/category.jpg'
   );
 }

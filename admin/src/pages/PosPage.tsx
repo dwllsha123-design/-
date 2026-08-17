@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 
 type PriceMode = 'RETAIL' | 'WHOLESALE';
 
-type ScannedVariant = {
+.type ScannedVariant = {
   variantId: string;
   sku: string;
   barcode?: string | null;
@@ -13,6 +13,7 @@ type ScannedVariant = {
   variantName?: string | null;
   retailPrice: number;
   wholesalePrice: number;
+  available?: number | null;
 };
 
 type CartItem = {
@@ -41,8 +42,9 @@ function unitPriceOf(v: { retailPrice: number; wholesalePrice: number }, mode: P
   return v.retailPrice;
 }
 
-export function PosPage() {
-  const { isOwner } = useAuth();
+export function PosPage({ embedded = false }: { embedded?: boolean }) {
+  const { user } = useAuth();
+  const canWholesale = user?.branch?.type === 'WHOLESALE_RETAIL';
   const scanRef = useRef<HTMLInputElement>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [priceMode, setPriceMode] = useState<PriceMode>('RETAIL');
@@ -76,8 +78,8 @@ export function PosPage() {
   }, []);
 
   function applyMode(mode: PriceMode) {
-    if (mode === 'WHOLESALE' && !isOwner) {
-      setError('بيع الجملة متاح للمالك فقط');
+    if (mode === 'WHOLESALE' && !canWholesale) {
+      setError('بيع الجملة متاح للفرع الرئيسي فقط');
       return;
     }
     setError('');
@@ -118,7 +120,9 @@ export function PosPage() {
         },
       ];
     });
-    setLastScan(`${label} → ${money(unitPrice)}`);
+    setLastScan(`${label} → ${money(unitPrice)}${
+      typeof v.available === 'number' ? ` — المتاح ${v.available}` : ''
+    }`);
     setMessage(`أُضيف: ${v.productName} (${money(unitPrice)})`);
   }
 
@@ -219,12 +223,14 @@ export function PosPage() {
 
   return (
     <div className="stack">
-      <div className="topbar">
-        <div className="page-title">
-          <h1>نقطة البيع</h1>
-          <p>من هنا تبيعين داخل المحل: امسحي باركود المنتج فيُحسب السعر تلقائياً (قطاعي أو جملة) ويُضاف للفاتورة، ثم أكّدي البيع واطبعي الفاتورة.</p>
+      {embedded ? null : (
+        <div className="topbar">
+          <div className="page-title">
+            <h1>نقطة البيع</h1>
+            <p>امسح باركود المنتج فيُحسب السعر تلقائياً ثم أكّد البيع واطبع الفاتورة.</p>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="panel" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button
@@ -234,17 +240,21 @@ export function PosPage() {
         >
           قطاعي
         </button>
-        <button
-          type="button"
-          className={`btn${priceMode === 'WHOLESALE' ? '' : ' secondary'}`}
-          onClick={() => applyMode('WHOLESALE')}
-          disabled={!isOwner}
-          title={!isOwner ? 'متاح للمالك فقط' : undefined}
-        >
-          جملة
-        </button>
+        {canWholesale ? (
+          <button
+            type="button"
+            className={`btn${priceMode === 'WHOLESALE' ? '' : ' secondary'}`}
+            onClick={() => applyMode('WHOLESALE')}
+          >
+            جملة
+          </button>
+        ) : (
+          <span className="badge info" style={{ alignSelf: 'center' }}>
+            هذا الفرع يبيع بالقطاعي فقط
+          </span>
+        )}
         <span className="badge info" style={{ alignSelf: 'center' }}>
-          الأسعار: {priceMode === 'WHOLESALE' ? 'جملة' : 'قطاعي'} — تلقائي من الباركود
+          {user?.branch?.name || 'نقطة البيع'} — {priceMode === 'WHOLESALE' ? 'جملة' : 'قطاعي'}
         </span>
       </div>
 

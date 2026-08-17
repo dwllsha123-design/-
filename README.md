@@ -10,6 +10,7 @@
 backend/      → Central API (NestJS + Prisma)
 admin/        → Admin Dashboard (Central Commerce UI)
 storefront/   → متجر العملاء (Lux-Ethereal UI)
+mobile/       → بنية تطبيق Android + iOS (نفس الـ API)
 Docs/         → التوثيق
 README.md
 ```
@@ -42,3 +43,8 @@ npm install
 npm run dev
 ```
 http://localhost:5174
+
+### تطبيقات الجوال (لاحقاً)
+
+البنية جاهزة دون بناء الشاشات: `mobile/` و [Docs/MOBILE.md](Docs/MOBILE.md).  
+نفس API: `http://localhost:3000/api/v1/mobile/bootstrap`

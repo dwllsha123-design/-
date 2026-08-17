@@ -43,6 +43,9 @@ export const PERMISSIONS = {
   USERS_MANAGE: 'users.manage',
   SETTINGS_MANAGE: 'settings.manage',
 
+  // Branches
+  BRANCHES_MANAGE: 'branches.manage',
+
   // Marketing / Audit
   MARKETING_MANAGE: 'marketing.manage',
   AUDIT_VIEW: 'audit.view',
@@ -80,6 +83,7 @@ export const PERMISSION_META: Array<{
   { code: PERMISSIONS.FACEBOOK_PAGES_MANAGE, nameAr: 'إدارة صفحات فيسبوك', nameEn: 'Manage FB pages', module: 'facebook' },
   { code: PERMISSIONS.USERS_MANAGE, nameAr: 'إدارة المستخدمين', nameEn: 'Manage users', module: 'users' },
   { code: PERMISSIONS.SETTINGS_MANAGE, nameAr: 'إدارة الإعدادات', nameEn: 'Manage settings', module: 'settings' },
+  { code: PERMISSIONS.BRANCHES_MANAGE, nameAr: 'إدارة الفروع', nameEn: 'Manage branches', module: 'branches' },
   { code: PERMISSIONS.MARKETING_MANAGE, nameAr: 'إدارة التسويق والعروض', nameEn: 'Manage marketing', module: 'marketing' },
   { code: PERMISSIONS.AUDIT_VIEW, nameAr: 'عرض سجل النشاط', nameEn: 'View audit log', module: 'audit' },
 ];
@@ -89,6 +93,7 @@ export const ROLE_CODES = {
   ADMIN: 'admin',
   SALES_AGENT: 'sales_agent',
   CASHIER: 'cashier',
+  BRANCH_CASHIER: 'branch_cashier',
   WAREHOUSE: 'warehouse_employee',
   DELIVERY_AGENT: 'delivery_agent',
   CUSTOMER: 'customer',

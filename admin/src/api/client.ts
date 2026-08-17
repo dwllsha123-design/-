@@ -8,6 +8,14 @@ export type ApiUser = {
   roles: string[];
   permissions: string[];
   facebookPages?: Array<{ id: string; name: string; status: string }>;
+  branch?: {
+    id: string;
+    name: string;
+    username: string;
+    type: 'WHOLESALE_RETAIL' | 'RETAIL';
+    isMain: boolean;
+    warehouseId: string;
+  } | null;
 };
 
 type ApiResponse<T> = {

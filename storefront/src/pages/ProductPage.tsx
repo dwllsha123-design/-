@@ -88,7 +88,7 @@ export function ProductPage() {
       <div className="product-layout">
         <div className="gallery">
           <div className={`gallery-main${unavailable ? ' is-unavailable' : ''}`}>
-            <img src={images[imageIdx]?.url || FALLBACK_IMG} alt={product.nameAr} />
+            <img src={images[imageIdx]?.url || FALLBACK_IMG} alt={product.nameAr} decoding="async" />
             {unavailable ? (
               <div className="unavailable-mark" aria-label="غير متوفر">
                 <span>غير متوفر</span>
@@ -105,7 +105,7 @@ export function ProductPage() {
                   onClick={() => setImageIdx(idx)}
                   aria-label={`صورة ${idx + 1}`}
                 >
-                  <img src={img.url} alt="" />
+                  <img src={img.url} alt="" loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>

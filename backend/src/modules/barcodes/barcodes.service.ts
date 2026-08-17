@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CodeSequenceService } from '../inventory/services/code-sequence.service';
+import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { canViewWholesalePrices } from '../../common/pricing/price-policy';
 
 @Injectable()
 export class BarcodesService {
@@ -100,7 +102,7 @@ export class BarcodesService {
   }
 
   /** بحث صنف بالباركود أو SKU لنقطة البيع */
-  async lookupVariant(code: string) {
+  async lookupVariant(code: string, user?: AuthUser) {
     const normalized = code.trim();
     if (!normalized) throw new BadRequestException('أدخل الباركود');
 
@@ -122,7 +124,23 @@ export class BarcodesService {
     }
 
     const retail = Number(variant.retailPrice || variant.price || 0);
-    const wholesale = Number(variant.wholesalePrice ?? retail);
+    const wholesaleRaw = Number(variant.wholesalePrice ?? retail);
+    const showWholesale = canViewWholesalePrices(user);
+    let available: number | null = null;
+    if (user?.branch?.warehouseId) {
+      const stock = await this.prisma.stockItem.findUnique({
+        where: {
+          warehouseId_variantId: {
+            warehouseId: user.branch.warehouseId,
+            variantId: variant.id,
+          },
+        },
+      });
+      available = Math.max(
+        0,
+        (stock?.quantityOnHand || 0) - (stock?.quantityReserved || 0),
+      );
+    }
 
     return {
       variantId: variant.id,
@@ -136,7 +154,8 @@ export class BarcodesService {
       color: variant.color,
       size: variant.size,
       retailPrice: retail,
-      wholesalePrice: wholesale,
+      wholesalePrice: showWholesale ? wholesaleRaw : retail,
+      available,
       label: this.labelForVariant(variant),
     };
   }

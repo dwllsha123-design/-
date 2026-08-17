@@ -6,6 +6,7 @@
 backend/      → NestJS Central API
 admin/        → Admin Dashboard (نظام الإدارة)  ≡ Frontend
 storefront/   → Customer Store (متجر العملاء)
+mobile/       → بنية تطبيق Android + iOS (Expo لاحقاً)
 Docs/         → توثيق
 README.md
 ```
@@ -61,3 +62,11 @@ ACCURATESS_TOKEN=...
 ## الموقع الحالي الخارجي
 
 لم يتوفر كود موقع قديم داخل المجلد بعد. عند توفيره يُربط بنفس Store/Central API.
+
+## تطبيقات Android و iOS
+
+نفس Store API. البنية جاهزة في `mobile/` والتفاصيل في [MOBILE.md](./MOBILE.md).
+
+- `GET /api/v1/mobile/bootstrap`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/mobile/devices`

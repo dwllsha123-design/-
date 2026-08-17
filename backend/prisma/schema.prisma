@@ -121,6 +121,23 @@ enum ReservationStatus {
   CANCELLED
 }
 
+enum ClientPlatform {
+  ANDROID
+  IOS
+  WEB
+  ADMIN
+}
+
+enum BranchType {
+  WHOLESALE_RETAIL
+  RETAIL
+}
+
+enum PushProvider {
+  FCM
+  APNS
+}
+
 // ─── Auth / RBAC ─────────────────────────────────────────
 
 model User {
@@ -141,10 +158,14 @@ model User {
   cashierOrders      Order[]                @relation("CashierOrders")
   warehouseMovements InventoryMovement[]    @relation("MovementBy")
   assignedDeliveries Delivery[]             @relation("DeliveryAgent")
+  courierProfile     Courier?
   reservations       StockReservation[]     @relation("AgentReservations")
   commissions        CommissionEntry[]      @relation("AgentCommissions")
   notifications      Notification[]         @relation("UserNotifications")
   auditLogs          AuditLog[]
+  sessions           AuthSession[]
+  devices            Device[]
+  branch             Branch?
 
   @@map("users")
 }
@@ -283,9 +304,10 @@ model ProductVariant {
   updatedAt      DateTime @updatedAt
 
   product      Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
-  stockItems   StockItem[]
-  orderItems   OrderItem[]
-  reservations StockReservation[]
+  stockItems    StockItem[]
+  orderItems    OrderItem[]
+  reservations  StockReservation[]
+  transferItems StockTransferItem[]
 
   @@index([productId])
   @@index([barcode])
@@ -323,24 +345,83 @@ model Warehouse {
   stockItems StockItem[]
   movements  InventoryMovement[]
   orders     Order[]
+  branch     Branch?
 
   @@map("warehouses")
+}
+
+model Branch {
+  id           String     @id @default(cuid())
+  name         String     @map("branchName")
+  username     String     @unique
+  passwordHash String     @map("password_hash")
+  type         BranchType @default(RETAIL)
+  isMain       Boolean    @default(false)
+  isActive     Boolean    @default(true)
+  warehouseId  String     @unique
+  userId       String     @unique
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  warehouse    Warehouse        @relation(fields: [warehouseId], references: [id])
+  user         User             @relation(fields: [userId], references: [id])
+  stockItems   StockItem[]
+  orders       Order[]
+  transfersOut StockTransfer[]  @relation("TransferFrom")
+  transfersIn  StockTransfer[]  @relation("TransferTo")
+
+  @@index([isActive])
+  @@map("branches")
 }
 
 model StockItem {
   id               String   @id @default(cuid())
   warehouseId      String
+  branchId         String?
   variantId        String
   quantityOnHand   Int      @default(0)
   quantityReserved Int      @default(0)
   reorderLevel     Int      @default(0)
   updatedAt        DateTime @updatedAt
 
-  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  branch    Branch?        @relation(fields: [branchId], references: [id])
   variant   ProductVariant @relation(fields: [variantId], references: [id])
 
   @@unique([warehouseId, variantId])
+  @@index([branchId, variantId])
   @@map("stock_items")
+}
+
+model StockTransfer {
+  id           String   @id @default(cuid())
+  fromBranchId String
+  toBranchId   String
+  notes        String?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  fromBranch Branch             @relation("TransferFrom", fields: [fromBranchId], references: [id])
+  toBranch   Branch             @relation("TransferTo", fields: [toBranchId], references: [id])
+  items      StockTransferItem[]
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([createdAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id         String @id @default(cuid())
+  transferId String
+  variantId  String
+  quantity   Int
+
+  transfer StockTransfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([transferId])
+  @@map("stock_transfer_items")
 }
 
 model InventoryMovement {
@@ -517,6 +598,7 @@ model Order {
   cashierId       String?
   facebookPageId  String?
   warehouseId     String?
+  branchId        String?
 
   /// Attribution snapshot
   pagePublicCode  Int?
@@ -563,6 +645,7 @@ model Order {
   cashier       User?          @relation("CashierOrders", fields: [cashierId], references: [id])
   facebookPage  FacebookPage?  @relation(fields: [facebookPageId], references: [id])
   warehouse     Warehouse?     @relation(fields: [warehouseId], references: [id])
+  branch        Branch?        @relation(fields: [branchId], references: [id])
   referralVisit ReferralVisit? @relation(fields: [referralVisitId], references: [id])
   courier       Courier?       @relation(fields: [courierId], references: [id])
   items         OrderItem[]
@@ -581,6 +664,7 @@ model Order {
   @@index([fulfillmentType])
   @@index([localStatus])
   @@index([courierId])
+  @@index([branchId])
   @@map("orders")
 }
 
@@ -605,21 +689,27 @@ model OrderItem {
 
 // ─── Delivery ────────────────────────────────────────────
 
-/// مناديب التوصيل المحلي داخل طرابلس
+/// مناديب التوصيل المحلي داخل طرابلس فقط
 model Courier {
-  id        String   @id @default(cuid())
-  name      String
-  phone     String?
-  isActive  Boolean  @default(true)
-  notes     String?
-  /// ربط اختياري بحساب مستخدم النظام (دور مندوب)
-  userId    String?  @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  name       String
+  phone      String?
+  isActive   Boolean   @default(true)
+  notes      String?
+  city       String    @default("طرابلس")
+  lastLat    Float?
+  lastLng    Float?
+  lastSeenAt DateTime?
+  /// ربط بحساب مستخدم النظام (دور مندوب) لتسجيل الدخول
+  userId     String?   @unique
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
+  user   User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   orders Order[]
 
   @@index([isActive])
+  @@index([city])
   @@map("couriers")
 }
 
@@ -842,4 +932,47 @@ model Notification {
 
   @@index([userId, isRead, createdAt])
   @@map("notifications")
+}
+
+// ─── Mobile sessions & devices ───────────────────────────
+
+model AuthSession {
+  id               String         @id @default(cuid())
+  userId           String
+  refreshTokenHash String         @unique
+  deviceId         String?
+  platform         ClientPlatform @default(WEB)
+  appVersion       String?
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime       @default(now())
+  createdAt        DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@map("auth_sessions")
+}
+
+model Device {
+  id           String         @id @default(cuid())
+  userId       String?
+  deviceId     String         @unique
+  platform     ClientPlatform
+  pushToken    String?
+  pushProvider PushProvider?
+  appVersion   String?
+  osVersion    String?
+  locale       String?        @default("ar")
+  lastSeenAt   DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([pushToken])
+  @@map("devices")
 }

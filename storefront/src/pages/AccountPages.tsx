@@ -327,20 +327,12 @@ export function SearchPage() {
       <div className="cat-grid">
         {categories.slice(0, 4).map((c) => (
           <Link key={c.id} to={`/category/${c.slug}`} className="cat-tile">
-            <div className="bg" style={{ backgroundImage: `url('${categoryImage(c.slug)}')` }} />
-            <div className="veil" />
+            <img src={categoryImage(c.slug)} alt={c.nameAr} loading="lazy" decoding="async" />
             <h3>{c.nameAr}</h3>
           </Link>
         ))}
         <Link to="/new" className="cat-tile">
-          <div
-            className="bg"
-            style={{
-              backgroundImage:
-                "url('https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=600&q=80')",
-            }}
-          />
-          <div className="veil" />
+          <img src="/home/coming-soon.jpg" alt="وصلنا حديثاً" loading="lazy" decoding="async" />
           <h3>وصلنا حديثاً</h3>
         </Link>
         <Link to="/offers" className="cat-tile offer-tile">

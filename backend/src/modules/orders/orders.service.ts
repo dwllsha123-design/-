@@ -92,10 +92,11 @@ export class OrdersService {
         facebookPage: true,
         items: true,
         deliveries: {
-          select: { id: true, shippingSlipNo: true, status: true },
+          select: { id: true, shippingSlipNo: true, status: true, agentId: true },
           orderBy: { createdAt: 'desc' },
           take: 1,
         },
+        courier: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: 100,

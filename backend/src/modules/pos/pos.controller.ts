@@ -23,8 +23,8 @@ export class PosController {
 
   @Get('invoice/:orderId')
   @RequirePermissions(PERMISSIONS.POS_SELL)
-  invoice(@Param('orderId') orderId: string) {
-    return this.posService.getInvoice(orderId);
+  invoice(@CurrentUser() user: AuthUser, @Param('orderId') orderId: string) {
+    return this.posService.getInvoice(orderId, user);
   }
 
   @Post('return')

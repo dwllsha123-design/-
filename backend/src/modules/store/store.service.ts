@@ -5,7 +5,6 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -23,6 +22,8 @@ import {
 } from '../../common/delivery/delivery-zones';
 import { OrderFulfillmentService } from '../delivery/order-fulfillment.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuthService } from '../auth/auth.service';
+import { SessionMeta } from '../../common/client-context';
 
 type PublicProduct = {
   id: string;
@@ -55,7 +56,7 @@ export class StoreService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inventory: CentralInventoryService,
-    private readonly jwt: JwtService,
+    private readonly authService: AuthService,
     private readonly config: ConfigService,
     private readonly fulfillment: OrderFulfillmentService,
     private readonly notifications: NotificationsService,
@@ -363,7 +364,7 @@ export class StoreService {
     };
   }
 
-  async register(dto: StoreRegisterDto) {
+  async register(dto: StoreRegisterDto, meta?: SessionMeta) {
     const existingUser = await this.prisma.user.findFirst({
       where: {
         OR: [
@@ -417,18 +418,7 @@ export class StoreService {
       return created;
     });
 
-    const accessToken = await this.jwt.signAsync({ sub: user.id });
-    return {
-      accessToken,
-      tokenType: 'Bearer',
-      user: {
-        id: user.id,
-        name: user.name,
-        phone: user.phone,
-        email: user.email,
-        roles: ['customer'],
-      },
-    };
+    return this.authService.issueForUser(user.id, meta);
   }
 
   async profile(user: AuthUser) {

@@ -1,0 +1,9 @@
+{
+  "name": "دار الأنوثة",
+  "ios": {
+    "CFBundleDisplayName": "دار الأنوثة"
+  },
+  "android": {
+    "app_name": "دار الأنوثة"
+  }
+}

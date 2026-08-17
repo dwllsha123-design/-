@@ -30,6 +30,9 @@ export class SettingsController {
       'company.phone_primary',
       'company.phone_secondary',
       'company.address',
+      'mobile.play_store_url',
+      'mobile.app_store_url',
+      'mobile.deep_link_scheme',
     ];
     const rows = await this.prisma.setting.findMany({
       where: { key: { in: keys } },

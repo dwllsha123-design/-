@@ -13,8 +13,12 @@ type Order = {
   city?: string;
   createdAt: string;
   pagePublicCode?: number | null;
+  deliveryType?: string;
+  fulfillmentType?: string | null;
+  courierId?: string | null;
+  courier?: { id: string; name: string } | null;
   facebookPage?: { id: string; name: string; publicCode?: number } | null;
-  deliveries?: Array<{ id: string; shippingSlipNo?: string | null; status: string }>;
+  deliveries?: Array<{ id: string; shippingSlipNo?: string | null; status: string; agentId?: string | null }>;
 };
 
 type Page = { id: string; name: string; publicCode: number };
@@ -222,13 +226,29 @@ export function OrdersPage() {
                     {new Date(o.createdAt).toLocaleString('ar-LY')}
                   </td>
                   <td>
-                    <Link
-                      className="btn secondary"
-                      to={`/delivery/print?orderIds=${o.id}`}
-                      target="_blank"
-                    >
-                      طباعة البوليصة
-                    </Link>
+                    {o.fulfillmentType === 'INTERNAL' || o.deliveryType === 'INTERNAL'
+                      ? o.courierId || o.courier || o.deliveries?.[0]?.agentId
+                        ? (
+                          <Link
+                            className="btn secondary"
+                            to={`/delivery/print?orderIds=${o.id}`}
+                            target="_blank"
+                          >
+                            طباعة البوليصة
+                          </Link>
+                          )
+                        : (
+                          <span className="muted">عيّني مندوباً أولاً</span>
+                          )
+                      : (
+                        <Link
+                          className="btn secondary"
+                          to={`/delivery/print?orderIds=${o.id}`}
+                          target="_blank"
+                        >
+                          طباعة البوليصة
+                        </Link>
+                      )}
                   </td>
                 </tr>
               ))}

@@ -5,10 +5,16 @@ const COST_PRICE_KEYS = new Set(['costPrice', 'cost', 'margin', 'profit', 'profi
 
 const WHOLESALE_PRICE_KEYS = new Set(['wholesalePrice', 'wholesale']);
 
-/** المالك الرئيسي فقط يرى/يدير سعر الجملة */
+/** المدير العام أو فرع الجملة/القطاعي يرى سعر الجملة */
 export function canViewWholesalePrices(user?: AuthUser | null): boolean {
   if (!user) return false;
-  return user.roles.includes(ROLE_CODES.SUPER_ADMIN);
+  if (user.roles.includes(ROLE_CODES.SUPER_ADMIN)) return true;
+  return user.branch?.type === 'WHOLESALE_RETAIL';
+}
+
+/** بيع الجملة من نقطة البيع — للفرع الرئيسي (جملة وقطاعي) فقط */
+export function canSellWholesale(user?: AuthUser | null): boolean {
+  return user?.branch?.type === 'WHOLESALE_RETAIL';
 }
 
 /** تكلفة/هامش — للإدارة والمخزن (بدون سعر الجملة) */

@@ -34,7 +34,7 @@ class CourierBodyDto {
 
   @IsOptional()
   @IsString()
-  userId?: string;
+  password?: string;
 }
 
 class LocalStatusDto {
@@ -55,6 +55,12 @@ export class CouriersController {
     private readonly couriers: CouriersService,
     private readonly fulfillment: OrderFulfillmentService,
   ) {}
+
+  @Get('couriers/dashboard')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  dashboard() {
+    return this.couriers.dashboard();
+  }
 
   @Get('couriers')
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)

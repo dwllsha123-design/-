@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState, type MouseEvent, type KeyboardEvent } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth/AuthContext';
+import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { isBranchUser, isDriverOnly, useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 
-const links = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: string;
+  perm: string;
+  hint: string;
+};
+
+const links: NavItem[] = [
   { to: '/', label: 'الرئيسية', icon: 'dashboard', perm: 'reports.view', hint: 'ملخص المبيعات وتنبيهات المخزون' },
   { to: '/orders', label: 'الطلبات', icon: 'shopping_cart', perm: 'orders.view', hint: 'متابعة طلبات الموقع وفيسبوك والمحل' },
-  { to: '/pos', label: 'نقطة البيع', icon: 'point_of_sale', perm: 'pos.sell', hint: 'بيع بالمحل عبر مسح الباركود' },
+  { to: '/branches', label: 'الفروع', icon: 'storefront', perm: 'branches.manage', hint: 'حسابات الفروع ومخزونها وتحويل البضائع' },
   { to: '/products', label: 'المنتجات', icon: 'inventory_2', perm: 'products.view', hint: 'إضافة المنتجات والصور والمقاسات والباركود' },
   { to: '/inventory', label: 'المخزون', icon: 'storage', perm: 'inventory.view', hint: 'إدخال الكميات ومتابعة المتوفر' },
-  { to: '/reservations', label: 'الحجوزات', icon: 'event_available', perm: 'orders.create', hint: 'حجز كمية حتى لا تُباع لغير صاحبها' },
-  { to: '/returns', label: 'إرجاع للمخزون', icon: 'assignment_return', perm: 'inventory.adjust', hint: 'إرجاع القطع بعد مسح باركود الطلب' },
   { to: '/customers', label: 'العملاء', icon: 'group', perm: 'customers.view', hint: 'بيانات الزبائن وطلباتهم السابقة' },
   { to: '/delivery', label: 'التوصيل', icon: 'local_shipping', perm: 'orders.view', hint: 'تعيين مندوب أو شركة توصيل وطباعة البوليصة' },
+  { to: '/tripoli-drivers', label: 'مناديب طرابلس', icon: 'sports_motorsports', perm: 'delivery.assign', hint: 'إدارة السائقين المستقلين داخل طرابلس' },
+  { to: '/delivery/company', label: 'طلبات شركة التوصيل', icon: 'local_shipping', perm: 'orders.view', hint: 'متابعة حالات Accuratess لحظياً' },
   { to: '/commissions', label: 'العمولات', icon: 'payments', perm: 'commissions.view', hint: 'عمولة المسوّقين والمندوبين' },
   { to: '/facebook-pages', label: 'الصفحات', icon: 'web', perm: 'facebook_pages.view', hint: 'صفحات فيسبوك وروابط المتجر الخاصة بها' },
   { to: '/promos', label: 'كوبونات', icon: 'sell', perm: 'marketing.manage', hint: 'أكواد الخصم للمتجر' },
@@ -131,19 +139,23 @@ export function AppLayout() {
     await loadNotifs();
   }
 
+  if (isDriverOnly(user)) {
+    return <Navigate to="/driver" replace />;
+  }
+  if (isBranchUser(user)) {
+    return <Navigate to="/branch" replace />;
+  }
+
   return (
     <div className="app-shell">
       {open ? <div className="sidebar-backdrop" onClick={() => setOpen(false)} /> : null}
 
       <aside className={`sidebar${open ? ' open' : ''}`}>
         <div className="brand">
+          <img className="brand-logo" src="/brand-logo.png" alt="دار الأنوثة" />
           <div className="brand-name">دار الأنوثة</div>
-          <div className="brand-kicker">نظام إدارة التجارة</div>
-          <div className="brand-phones">
-            طرابلس — ليبيا
-            <br />
-            0911820999 · 0924443839
-          </div>
+          <div className="brand-kicker">لوحة تحكم إدارة الأعمال</div>
+          <div className="brand-phones">شركة دار الأنوثة</div>
         </div>
 
         {hasPermission('orders.create') ? (
@@ -162,7 +174,7 @@ export function AppLayout() {
               <NavLink
                 key={l.to}
                 to={l.to}
-                end={l.to === '/'}
+                end={l.to === '/' || l.to === '/delivery'}
                 title={l.hint}
                 className={({ isActive }) => (isActive ? 'active' : undefined)}
                 onClick={() => setOpen(false)}
@@ -181,6 +193,7 @@ export function AppLayout() {
               logout
             </span>
           </button>
+          <div className="sidebar-copy">شركة دار الأنوثة © 2026</div>
         </div>
       </aside>
 

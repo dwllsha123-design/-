@@ -101,8 +101,14 @@ export class ReturnsService {
         data: {
           returnedToStockAt: new Date(),
           status: 'RETURNED',
+          localStatus: 'RETURNED',
         },
         include: { items: true },
+      });
+
+      await tx.delivery.updateMany({
+        where: { orderId: order.id, status: { notIn: ['DELIVERED'] } },
+        data: { status: 'RETURNED' },
       });
 
       await tx.auditLog.create({

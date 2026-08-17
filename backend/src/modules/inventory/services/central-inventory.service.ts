@@ -37,9 +37,33 @@ export class CentralInventoryService {
     const existing = await tx.stockItem.findUnique({
       where: { warehouseId_variantId: { warehouseId, variantId } },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (!existing.branchId) {
+        const warehouse = await tx.warehouse.findUnique({
+          where: { id: warehouseId },
+          include: { branch: true },
+        });
+        if (warehouse?.branch?.id) {
+          return tx.stockItem.update({
+            where: { id: existing.id },
+            data: { branchId: warehouse.branch.id },
+          });
+        }
+      }
+      return existing;
+    }
+    const warehouse = await tx.warehouse.findUnique({
+      where: { id: warehouseId },
+      include: { branch: true },
+    });
     return tx.stockItem.create({
-      data: { warehouseId, variantId, quantityOnHand: 0, quantityReserved: 0 },
+      data: {
+        warehouseId,
+        variantId,
+        branchId: warehouse?.branch?.id ?? null,
+        quantityOnHand: 0,
+        quantityReserved: 0,
+      },
     });
   }
 
@@ -224,6 +248,71 @@ export class CentralInventoryService {
       });
       await this.writeMovement(tx, 'IN', input);
       return updated;
+    };
+    return input.tx ? run(input.tx) : this.withTransaction(run);
+  }
+
+  async transferBetweenWarehouses(
+    input: {
+      tx?: Tx;
+      fromWarehouseId: string;
+      toWarehouseId: string;
+      variantId: string;
+      quantity: number;
+      actorId?: string;
+      reference?: string;
+      notes?: string;
+    },
+  ) {
+    const run = async (tx: Tx) => {
+      if (input.fromWarehouseId === input.toWarehouseId) {
+        throw new BadRequestException('لا يمكن التحويل إلى نفس الفرع');
+      }
+      if (input.quantity <= 0) {
+        throw new BadRequestException('كمية التحويل غير صالحة');
+      }
+      const source = await this.getOrCreateStock(
+        tx,
+        input.fromWarehouseId,
+        input.variantId,
+      );
+      const available = this.availableQty(source.quantityOnHand, source.quantityReserved);
+      if (available < input.quantity) {
+        throw new BadRequestException(
+          `المخزون غير كافٍ في الفرع المصدر (المتاح: ${available})`,
+        );
+      }
+      await tx.stockItem.update({
+        where: { id: source.id },
+        data: { quantityOnHand: { decrement: input.quantity } },
+      });
+      const dest = await this.getOrCreateStock(
+        tx,
+        input.toWarehouseId,
+        input.variantId,
+      );
+      await tx.stockItem.update({
+        where: { id: dest.id },
+        data: { quantityOnHand: { increment: input.quantity } },
+      });
+      await this.writeMovement(tx, 'TRANSFER', {
+        warehouseId: input.fromWarehouseId,
+        variantId: input.variantId,
+        quantity: input.quantity,
+        actorId: input.actorId,
+        reference: input.reference,
+        reason: 'branch_transfer_out',
+        notes: input.notes,
+      });
+      await this.writeMovement(tx, 'TRANSFER', {
+        warehouseId: input.toWarehouseId,
+        variantId: input.variantId,
+        quantity: input.quantity,
+        actorId: input.actorId,
+        reference: input.reference,
+        reason: 'branch_transfer_in',
+        notes: input.notes,
+      });
     };
     return input.tx ? run(input.tx) : this.withTransaction(run);
   }

@@ -20,6 +20,10 @@ export class ReferralService {
     return this.config.get<string>('STORE_URL') || 'http://localhost:5174';
   }
 
+  private deepLinkScheme() {
+    return this.config.get<string>('MOBILE_DEEP_LINK_SCHEME') || 'daronotha';
+  }
+
   private apiPublicUrl() {
     return this.config.get<string>('APP_URL') || 'http://localhost:3000';
   }
@@ -37,6 +41,7 @@ export class ReferralService {
     return {
       shortLink: `${api}${shortPath}`,
       storefrontLink: storePath,
+      deepLink: `${this.deepLinkScheme()}://r/${pageCode}${agentCode != null ? `/${agentCode}` : ''}`,
       path: shortPath,
     };
   }
@@ -89,6 +94,7 @@ export class ReferralService {
 
     return {
       redirectUrl: redirectUrl.toString(),
+      deepLink: links.deepLink,
       attributionToken: token,
       page: {
         id: page.id,

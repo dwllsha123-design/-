@@ -40,7 +40,8 @@ npm run start:dev
 
 | Module | Endpoints |
 |--------|-----------|
-| Auth | `POST /auth/login`, `GET /auth/me` |
+| Auth | `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me` |
+| Mobile | `GET /mobile/bootstrap`, `POST /mobile/devices` — تطبيقات Android / iOS |
 | Users | CRUD + roles |
 | Customers | CRM أساسي |
 | Products | منتجات + variants |

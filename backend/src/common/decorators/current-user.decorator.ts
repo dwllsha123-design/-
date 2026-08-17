@@ -1,5 +1,14 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 
+export type BranchSession = {
+  id: string;
+  name: string;
+  username: string;
+  type: 'WHOLESALE_RETAIL' | 'RETAIL';
+  isMain: boolean;
+  warehouseId: string;
+};
+
 export type AuthUser = {
   id: string;
   email?: string | null;
@@ -7,6 +16,7 @@ export type AuthUser = {
   name: string;
   roles: string[];
   permissions: string[];
+  branch?: BranchSession | null;
 };
 
 export const CurrentUser = createParamDecorator(

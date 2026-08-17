@@ -6,6 +6,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { StoreService } from './store.service';
@@ -22,6 +23,7 @@ import {
 } from '../../common/decorators/current-user.decorator';
 import { LoginDto } from '../auth/dto/login.dto';
 import { AuthService } from '../auth/auth.service';
+import { clientMetaFromRequest } from '../../common/client-context';
 
 @ApiTags('Store')
 @Controller('store')
@@ -73,14 +75,20 @@ export class StoreController {
 
   @Public()
   @Post('auth/register')
-  register(@Body() dto: StoreRegisterDto) {
-    return this.storeService.register(dto);
+  register(
+    @Body() dto: StoreRegisterDto,
+    @Req() req: { ip?: string; headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.storeService.register(dto, clientMetaFromRequest(req));
   }
 
   @Public()
   @Post('auth/login')
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  login(
+    @Body() dto: LoginDto,
+    @Req() req: { ip?: string; headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.authService.login(dto, clientMetaFromRequest(req, dto));
   }
 
   @Public()

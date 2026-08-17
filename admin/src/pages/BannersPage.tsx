@@ -152,7 +152,13 @@ export function BannersPage() {
       <div className="page-title">
         <h1>اللافتات الإعلانية</h1>
         <p>
-          من هنا تضيفين صور العروض في الصفحة الرئيسية للمتجر. لكل لافتة يمكنكِ: تعديلها، تفعيلها أو إيقافها، أو حذفها.
+          من هنا تضيفين صور العروض في الصفحة الرئيسية للمتجر. المقاسات مأخوذة من الموقع الحالي{' '}
+          <a href="https://www.daralonotha.ly" target="_blank" rel="noreferrer">
+            daralonotha.ly
+          </a>
+          : بنر الرئيسية <strong>1920×1080</strong> (نسبة 16:9، ارتفاع العرض لا يقل عن 480px). صورة قسم «قريباً»
+          <strong> 1200×1500</strong> (4:5). صور المنتجات <strong>900×1200</strong> (3:4). الشعار مربع{' '}
+          <strong>1500×1500</strong> ويُعرض 64px / 72px / 80px.
         </p>
       </div>
       {error ? <div className="error">{error}</div> : null}
@@ -216,7 +222,7 @@ export function BannersPage() {
           </label>
         ) : null}
         <label style={{ gridColumn: '1 / -1' }}>
-          صورة اللافتة — ارفعي من جهازك
+          صورة اللافتة — ارفعي من جهازك (الأفضل 1920×1080 / 16:9)
           <input
             type="file"
             accept="image/*"
@@ -241,7 +247,8 @@ export function BannersPage() {
             </div>
             <div
               style={{
-                height: 160,
+                aspectRatio: '16 / 9',
+                minHeight: 160,
                 borderRadius: 12,
                 background: `#2d2926 url('${preview}') center/cover`,
                 position: 'relative',

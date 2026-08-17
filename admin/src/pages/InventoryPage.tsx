@@ -1,5 +1,8 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
+import { ReturnToStockPanel } from './ReturnsPage';
 
 type Stock = {
   id: string;
@@ -28,6 +31,10 @@ function stockStatus(available: number, reorderLevel: number) {
 }
 
 export function InventoryPage() {
+  const { hasPermission, isOwner } = useAuth();
+  const [params, setParams] = useSearchParams();
+  const canReturn = isOwner || hasPermission('inventory.adjust');
+  const tab = params.get('tab') === 'returns' && canReturn ? 'returns' : 'stock';
   const [stock, setStock] = useState<Stock[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [variantId, setVariantId] = useState('');
@@ -117,24 +124,57 @@ export function InventoryPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>إدارة المخزون</h1>
-          <p>من هنا تدخلين كمية كل منتج بعد إضافته في صفحة المنتجات، وتشوفين المتوفر والقريب من النفاد. بدون كمية هنا لن يظهر المنتج متاحاً للبيع.</p>
+          <p>
+            {tab === 'returns'
+              ? 'إرجاع القطع إلى المخزون بعد مسح باركود الطلب.'
+              : 'من هنا تدخلين كمية كل منتج بعد إضافته في صفحة المنتجات، وتشوفين المتوفر والقريب من النفاد. بدون كمية هنا لن يظهر المنتج متاحاً للبيع.'}
+          </p>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn secondary" type="button" onClick={() => setShowAdjust((v) => !v)}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-              tune
-            </span>
-            تسوية مخزون
-          </button>
-          <button className="btn" type="button" onClick={() => setShowAdjust(true)}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-              add
-            </span>
-            إدخال/إخراج
-          </button>
-        </div>
+        {tab === 'stock' ? (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn secondary" type="button" onClick={() => setShowAdjust((v) => !v)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                tune
+              </span>
+              تسوية مخزون
+            </button>
+            <button className="btn" type="button" onClick={() => setShowAdjust(true)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                add
+              </span>
+              إدخال/إخراج
+            </button>
+          </div>
+        ) : null}
       </div>
 
+      {canReturn ? (
+        <div className="page-tabs" role="tablist" aria-label="أقسام المخزون">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'stock'}
+            className={tab === 'stock' ? 'active' : ''}
+            onClick={() => setParams({})}
+          >
+            المخزون
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'returns'}
+            className={tab === 'returns' ? 'active' : ''}
+            onClick={() => setParams({ tab: 'returns' })}
+          >
+            إرجاع للمخزون
+          </button>
+        </div>
+      ) : null}
+
+      {tab === 'returns' ? <ReturnToStockPanel /> : null}
+
+      {tab === 'stock' ? (
+        <>
       <div className="stats">
         <div className="stat">
           <div className="stat-label">أصناف المخزون</div>
@@ -266,6 +306,8 @@ export function InventoryPage() {
           </table>
         </div>
       </div>
+        </>
+      ) : null}
     </div>
   );
 }

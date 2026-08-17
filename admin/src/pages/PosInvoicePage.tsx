@@ -18,6 +18,7 @@ type InvoicePayload = {
   notes?: string | null;
   invoice?: { invoiceNumber: string; issuedAt: string; notes?: string | null } | null;
   cashier?: { name: string } | null;
+  branchName?: string | null;
   customer?: { name: string; phone?: string | null } | null;
   company: { name: string; city: string; phones: string[] };
   items: Array<{
@@ -125,6 +126,7 @@ export function PosInvoicePage() {
         <p>{data.company.city}</p>
         <p>{data.company.phones.join(' · ')}</p>
         <div className="mode-pill">فاتورة {data.priceModeLabel}</div>
+        {data.branchName ? <p>{data.branchName}</p> : null}
       </header>
 
       <div className="meta">

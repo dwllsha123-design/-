@@ -218,20 +218,12 @@ export function CategoriesPage() {
       <div className="cat-grid">
         {categories.map((c) => (
           <Link key={c.id} to={`/category/${c.slug}`} className="cat-tile">
-            <div className="bg" style={{ backgroundImage: `url('${categoryImage(c.slug)}')` }} />
-            <div className="veil" />
+            <img src={categoryImage(c.slug)} alt={c.nameAr} loading="lazy" decoding="async" />
             <h3>{c.nameAr}</h3>
           </Link>
         ))}
         <Link to="/new" className="cat-tile">
-          <div
-            className="bg"
-            style={{
-              backgroundImage:
-                "url('https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=700&q=80')",
-            }}
-          />
-          <div className="veil" />
+          <img src="/home/coming-soon.jpg" alt="وصل حديثاً" loading="lazy" decoding="async" />
           <h3>وصل حديثاً</h3>
         </Link>
         <Link to="/offers" className="cat-tile offer-tile">
@@ -239,14 +231,7 @@ export function CategoriesPage() {
           <p>اكتشفي أحدث التخفيضات</p>
         </Link>
         <Link to="/bestseller" className="cat-tile">
-          <div
-            className="bg"
-            style={{
-              backgroundImage:
-                "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?auto=format&fit=crop&w=700&q=80')",
-            }}
-          />
-          <div className="veil" />
+          <img src="/home/product-kaftan-34.jpg" alt="الأكثر مبيعاً" loading="lazy" decoding="async" />
           <h3>الأكثر مبيعاً</h3>
         </Link>
       </div>

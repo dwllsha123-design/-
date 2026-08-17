@@ -50,6 +50,12 @@ export class DeliveryController {
     return this.deliveryService.createCompany(dto);
   }
 
+  @Get('company-orders')
+  @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
+  companyOrders(@CurrentUser() user: AuthUser) {
+    return this.deliveryService.listCompanyOrders(user);
+  }
+
   @Get()
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
   list(

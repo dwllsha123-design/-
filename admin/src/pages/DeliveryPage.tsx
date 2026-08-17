@@ -261,6 +261,15 @@ export function DeliveryPage() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link className="btn" to="/delivery/company">
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+              local_shipping
+            </span>
+            طلبات شركة التوصيل
+          </Link>
+          <Link className="btn secondary" to="/tripoli-drivers">
+            مناديب طرابلس
+          </Link>
           <button className="btn secondary" type="button" onClick={() => syncAll()}>
             تحديث من Accuratess
           </button>
@@ -513,9 +522,13 @@ export function DeliveryPage() {
                   </span>
                 </td>
                 <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <Link className="btn secondary" to={`/delivery/print?ids=${d.id}`} target="_blank">
-                    طباعة
-                  </Link>
+                  {d.type === 'INTERNAL' && !d.order.courier && !d.agent ? (
+                    <span className="muted">عيّني مندوباً أولاً</span>
+                  ) : (
+                    <Link className="btn secondary" to={`/delivery/print?ids=${d.id}`} target="_blank">
+                      طباعة
+                    </Link>
+                  )}
                   {d.type === 'EXTERNAL' ? (
                     <button className="btn ghost" type="button" onClick={() => syncOne(d.id)}>
                       تحديث

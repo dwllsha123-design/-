@@ -4,6 +4,10 @@ import { Injectable, Module } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
+import {
+  CurrentUser,
+  AuthUser,
+} from '../../common/decorators/current-user.decorator';
 
 @Injectable()
 export class ReportsService {
@@ -29,7 +33,7 @@ export class ReportsService {
     return { orders, sales: Number(sales._sum.totalAmount || 0) };
   }
 
-  async dashboard() {
+  async dashboard(user?: AuthUser) {
     const startOfDay = this.range(0);
     const startOfWeek = this.range(6);
     const startOfMonth = this.range(29);
@@ -136,12 +140,88 @@ export class ReportsService {
       pendingMarketers,
       customersCount,
       productsCount,
+      inventoryValue: user?.roles.includes('super_admin')
+        ? await this.inventoryValuation()
+        : undefined,
       channelSales: {
         online: sumSource(bySourceMapped, onlineSources),
         pos: sumSource(bySourceMapped, posSources),
       },
       bySource: bySourceMapped,
       recentOrders,
+    };
+  }
+
+  private async inventoryValuation() {
+    const items = await this.prisma.stockItem.findMany({
+      where: { quantityOnHand: { gt: 0 } },
+      include: {
+        variant: { include: { product: true } },
+        branch: { select: { id: true, name: true, isMain: true } },
+      },
+    });
+
+    const productIds = new Set<string>();
+    const skuIds = new Set<string>();
+    let pieces = 0;
+    let costTotal = 0;
+    let retailTotal = 0;
+    let wholesaleTotal = 0;
+    const byBranch = new Map<
+      string,
+      { branchId: string; branchName: string; pieces: number; costTotal: number; retailTotal: number; wholesaleTotal: number }
+    >();
+
+    for (const item of items) {
+      const qty = Math.max(0, item.quantityOnHand);
+      if (!qty) continue;
+      pieces += qty;
+      productIds.add(item.variant.productId);
+      skuIds.add(item.variantId);
+      const cost = Number(
+        item.variant.costPrice ?? item.variant.product.costPrice ?? 0,
+      );
+      const retail = Number(
+        item.variant.retailPrice ||
+          item.variant.price ||
+          item.variant.product.retailPrice ||
+          0,
+      );
+      const wholesale = Number(
+        item.variant.wholesalePrice ??
+          item.variant.product.wholesalePrice ??
+          0,
+      );
+      costTotal += qty * cost;
+      retailTotal += qty * retail;
+      wholesaleTotal += qty * wholesale;
+
+      const key = item.branchId || item.warehouseId;
+      const name = item.branch?.name || 'بدون فرع';
+      const row = byBranch.get(key) || {
+        branchId: key,
+        branchName: name,
+        pieces: 0,
+        costTotal: 0,
+        retailTotal: 0,
+        wholesaleTotal: 0,
+      };
+      row.pieces += qty;
+      row.costTotal += qty * cost;
+      row.retailTotal += qty * retail;
+      row.wholesaleTotal += qty * wholesale;
+      byBranch.set(key, row);
+    }
+
+    const round = (n: number) => Math.round(n * 1000) / 1000;
+    return {
+      productCount: productIds.size,
+      skuCount: skuIds.size,
+      pieces,
+      costTotal: round(costTotal),
+      retailTotal: round(retailTotal),
+      wholesaleTotal: round(wholesaleTotal),
+      byBranch: [...byBranch.values()].sort((a, b) => b.pieces - a.pieces),
     };
   }
 
@@ -294,8 +374,8 @@ export class ReportsController {
 
   @Get('dashboard')
   @RequirePermissions(PERMISSIONS.REPORTS_VIEW)
-  dashboard() {
-    return this.reportsService.dashboard();
+  dashboard(@CurrentUser() user: AuthUser) {
+    return this.reportsService.dashboard(user);
   }
 
   @Get('sales')

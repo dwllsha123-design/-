@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "دار الأنوثة",
+    "slug": "dar-al-onotha",
+    "scheme": "daronotha",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FAF7F2"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "ly.daronotha.store",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "CFBundleDevelopmentRegion": "ar"
+      },
+      "associatedDomains": ["applinks:dar-alunotha.ly"]
+    },
+    "android": {
+      "package": "ly.daronotha.store",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FAF7F2"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "dar-alunotha.ly",
+              "pathPrefix": "/"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "locales": {
+      "ar": "./locales/ar.json"
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3000/api/v1",
+      "eas": {
+        "projectId": "replace-after-eas-init"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-notifications",
+      "expo-linking"
+    ]
+  }
+}

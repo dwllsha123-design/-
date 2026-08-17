@@ -12,12 +12,41 @@ import { api, ApiUser, setToken } from '../api/client';
 type AuthState = {
   user: ApiUser | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   hasPermission: (code: string) => boolean;
   /** المالك الرئيسي (super_admin) — يرى سعر الجملة */
   isOwner: boolean;
 };
+
+export function isDriverOnly(user: ApiUser | null) {
+  if (!user) return false;
+  const staff = user.roles.includes('super_admin') || user.roles.includes('admin');
+  return user.roles.includes('delivery_agent') && !staff;
+}
+
+export function isBranchUser(user: ApiUser | null) {
+  if (!user?.branch?.id) return false;
+  const staff = user.roles.includes('super_admin') || user.roles.includes('admin');
+  return !staff;
+}
+
+export function homePath(user: ApiUser | null) {
+  if (isDriverOnly(user)) return '/driver';
+  if (isBranchUser(user)) return '/branch';
+  return '/';
+}
+
+export function detectLoginKind(raw: string): 'phone' | 'email' | 'username' {
+  const value = raw.trim();
+  if (!value) return 'username';
+  if (value.includes('@')) return 'email';
+  const compact = value.replace(/[\s-]/g, '');
+  if (/^(\+?218|0)?9\d{8}$/.test(compact) || /^\d{8,15}$/.test(compact.replace(/\D/g, ''))) {
+    return 'phone';
+  }
+  return 'username';
+}
 
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -46,10 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (identifier: string, password: string) => {
     const res = await api<{ accessToken: string; user: ApiUser }>('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier: identifier.trim(), password }),
     });
     setToken(res.accessToken);
     setUser(res.user);

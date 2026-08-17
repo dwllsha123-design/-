@@ -20,6 +20,8 @@ async function bootstrap() {
     exclude: [
       { path: 'r/:pageCode', method: RequestMethod.GET },
       { path: 'r/:pageCode/:agentCode', method: RequestMethod.GET },
+      { path: '.well-known/apple-app-site-association', method: RequestMethod.GET },
+      { path: '.well-known/assetlinks.json', method: RequestMethod.GET },
     ],
   });
   app.useGlobalPipes(
@@ -49,13 +51,21 @@ async function bootstrap() {
     origin: origins,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Client-Platform',
+      'X-App-Version',
+      'X-Device-Id',
+    ],
+    exposedHeaders: ['X-Api-Version'],
   });
 
   const swagger = new DocumentBuilder()
     .setTitle('دار الأنوثة API')
     .setDescription(
-      'Central Omnichannel Commerce API — Orders, Inventory, POS, Delivery, Referral',
+      'Central Omnichannel Commerce API — Web, Admin, Android, and iOS',
     )
     .setVersion('1.0')
     .addBearerAuth()

@@ -43,3 +43,15 @@ yarn-error.log*
 # Uploaded product images
 backend/uploads/
 uploads/
+
+# Expo / native
+mobile/node_modules/
+mobile/.expo/
+mobile/ios/
+mobile/android/
+mobile/secrets/
+google-services.json
+GoogleService-Info.plist
+*.jks
+*.p8
+*.mobileprovision

@@ -3,6 +3,8 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useCart } from '../cart/CartContext';
 import { useAuth } from '../auth/AuthContext';
 import { useStoreCategories } from '../hooks/useStoreCategories';
+import { useTheme } from '../theme/ThemeContext';
+import { ThemeToggle } from '../theme/ThemeToggle';
 
 const CATEGORY_ICONS: Record<string, string> = {
   lingerie: 'checkroom',
@@ -40,8 +42,10 @@ function bottomActive(pathname: string, key: string) {
 export function StoreLayout() {
   const { count } = useCart();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [headerHidden, setHeaderHidden] = useState(false);
   const categories = useStoreCategories();
   const drawerLinks = useMemo(
     () => [
@@ -62,6 +66,7 @@ export function StoreLayout() {
 
   useEffect(() => {
     setDrawerOpen(false);
+    setHeaderHidden(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -71,9 +76,31 @@ export function StoreLayout() {
     };
   }, [drawerOpen]);
 
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      if (drawerOpen) {
+        setHeaderHidden(false);
+        lastY = window.scrollY;
+        return;
+      }
+      const y = window.scrollY;
+      if (y < 16) {
+        setHeaderHidden(false);
+      } else if (y > lastY + 4) {
+        setHeaderHidden(true);
+      } else if (y < lastY - 4) {
+        setHeaderHidden(false);
+      }
+      lastY = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [drawerOpen]);
+
   return (
     <div className="page-shell">
-      <header className="site-header">
+      <header className={`site-header${headerHidden ? ' is-hidden' : ''}`}>
         <div className="container">
           <div className="header-bar">
             <div className="header-side">
@@ -100,6 +127,7 @@ export function StoreLayout() {
               <Link className="icon-btn desktop-only" to={user ? '/account' : '/login'} aria-label="حسابي">
                 <span className="material-symbols-outlined">person</span>
               </Link>
+              <ThemeToggle />
               <Link className="icon-btn" to="/cart" aria-label="السلة">
                 <span className="material-symbols-outlined">shopping_bag</span>
                 {count > 0 ? <span className="cart-badge">{count > 9 ? '9+' : count}</span> : null}
@@ -154,6 +182,12 @@ export function StoreLayout() {
                 <span className="material-symbols-outlined">{l.icon}</span>
               </NavLink>
             ))}
+            <button type="button" className="theme-drawer-btn" onClick={toggleTheme}>
+              <span>{theme === 'dark' ? 'الوضع النهاري' : 'الوضع الليلي'}</span>
+              <span className="material-symbols-outlined">
+                {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+              </span>
+            </button>
             {user ? (
               <button type="button" onClick={logout}>
                 <span>خروج</span>

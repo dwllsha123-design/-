@@ -4,6 +4,10 @@ import { IsArray, IsString } from 'class-validator';
 import { BarcodesService } from './barcodes.service';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
+import {
+  CurrentUser,
+  AuthUser,
+} from '../../common/decorators/current-user.decorator';
 
 class PrintBarcodesDto {
   @IsArray()
@@ -37,8 +41,8 @@ export class BarcodesController {
 
   @Get('lookup/:code')
   @RequirePermissions(PERMISSIONS.POS_SELL)
-  lookup(@Param('code') code: string) {
-    return this.barcodesService.lookupVariant(decodeURIComponent(code));
+  lookup(@CurrentUser() user: AuthUser, @Param('code') code: string) {
+    return this.barcodesService.lookupVariant(decodeURIComponent(code), user);
   }
 
   @Get('orders/:orderId')

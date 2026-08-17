@@ -483,6 +483,45 @@ export class DeliveryService {
     return updated;
   }
 
+  /** قفل البوليصة: طلبات طرابلس لا تُطبع إلا بعد تعيين مندوب */
+  private assertWaybillPrintable(order: {
+    deliveryType?: string | null;
+    fulfillmentType?: string | null;
+    courierId?: string | null;
+    courier?: { id: string } | null;
+    deliveries?: Array<{ agentId?: string | null; status?: string }>;
+  }) {
+    const internal =
+      order.fulfillmentType === 'INTERNAL' || order.deliveryType === 'INTERNAL';
+    if (!internal) return;
+    const assigned =
+      Boolean(order.courierId) ||
+      Boolean(order.courier?.id) ||
+      Boolean(order.deliveries?.[0]?.agentId);
+    if (!assigned) {
+      throw new BadRequestException(
+        'لا يمكن طباعة البوليصة قبل تعيين مندوب توصيل للطلب.',
+      );
+    }
+  }
+
+  async listCompanyOrders(user: AuthUser) {
+    const rows = await this.listDeliveries(user, undefined, 'EXTERNAL');
+    const groups: Record<string, number> = {
+      PENDING: 0,
+      ASSIGNED: 0,
+      PICKED_UP: 0,
+      IN_TRANSIT: 0,
+      DELIVERED: 0,
+      FAILED: 0,
+      RETURNED: 0,
+    };
+    for (const row of rows) {
+      groups[row.status] = (groups[row.status] || 0) + 1;
+    }
+    return { live: true, counts: groups, orders: rows };
+  }
+
   async getShippingSlip(id: string) {
     const delivery = await this.prisma.delivery.findUnique({
       where: { id },
@@ -491,6 +530,7 @@ export class DeliveryService {
           include: {
             items: true,
             customer: true,
+            courier: { select: { id: true, name: true, phone: true } },
             facebookPage: { select: { id: true, name: true, publicCode: true } },
           },
         },
@@ -499,6 +539,7 @@ export class DeliveryService {
       },
     });
     if (!delivery) throw new NotFoundException('بوليصة الشحن غير موجودة');
+    this.assertWaybillPrintable(delivery.order);
     const senderName = await this.resolveSenderName(delivery.order);
     return {
       ...delivery,
@@ -514,6 +555,7 @@ export class DeliveryService {
       include: {
         items: true,
         customer: true,
+        courier: { select: { id: true, name: true, phone: true } },
         facebookPage: { select: { id: true, name: true, publicCode: true } },
         deliveries: {
           orderBy: { createdAt: 'desc' },
@@ -526,6 +568,7 @@ export class DeliveryService {
       },
     });
     if (!order) throw new NotFoundException('الطلب غير موجود');
+    this.assertWaybillPrintable(order);
     if (order.deliveries[0]) {
       return this.getShippingSlip(order.deliveries[0].id);
     }
@@ -540,7 +583,9 @@ export class DeliveryService {
       status: order.status,
       senderName,
       sourcePage: senderName,
-      agent: null,
+      agent: order.courier
+        ? { id: order.courier.id, name: order.courier.name, phone: order.courier.phone }
+        : null,
       company: null,
       printTitle: 'بوليصة شحن — دار الأنوثة',
       order,
@@ -564,7 +609,18 @@ export class DeliveryService {
       if (!orders.length) {
         throw new BadRequestException('لا توجد بوليصات لهذه الصفحة');
       }
-      for (const o of orders) slips.push(await this.slipFromOrder(o.id));
+      for (const o of orders) {
+        try {
+          slips.push(await this.slipFromOrder(o.id));
+        } catch {
+          /* طلبات طرابلس بلا مندوب تُتخطّى ولا تُطبع */
+        }
+      }
+      if (!slips.length) {
+        throw new BadRequestException(
+          'لا يمكن طباعة بوليصات هذه الصفحة قبل تعيين مناديب لطلبات طرابلس.',
+        );
+      }
       return { slips };
     }
     if (dto.orderIds?.length) {
