@@ -5,6 +5,7 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { CommissionsModule } from '../commissions/commissions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { FulfillmentModule } from '../delivery/fulfillment.module';
+import { StoreModule } from '../store/store.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { FulfillmentModule } from '../delivery/fulfillment.module';
     CommissionsModule,
     NotificationsModule,
     FulfillmentModule,
+    StoreModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

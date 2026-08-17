@@ -13,7 +13,11 @@ import { canViewCostPrices, retailOf } from '../../common/pricing/price-policy';
 import { CommissionsService } from '../commissions/commissions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrderFulfillmentService } from '../delivery/order-fulfillment.service';
-import { findDeliveryCity } from '../../common/delivery/delivery-zones';
+import { StoreService } from '../store/store.service';
+import {
+  deliveryGenderLabelAr,
+  findDeliveryCity,
+} from '../../common/delivery/delivery-zones';
 
 @Injectable()
 export class OrdersService {
@@ -23,6 +27,7 @@ export class OrdersService {
     private readonly commissions: CommissionsService,
     private readonly notifications: NotificationsService,
     private readonly fulfillment: OrderFulfillmentService,
+    private readonly storeService: StoreService,
   ) {}
 
   private async nextOrderNumber(tx: Prisma.TransactionClient): Promise<string> {
@@ -180,6 +185,15 @@ export class OrdersService {
 
     await this.assertFacebookPageAccess(user, facebookPageId);
 
+    const deliveryQuote =
+      dto.source !== 'POS' && dto.city
+        ? await this.storeService.resolveDelivery(
+            dto.city,
+            dto.area,
+            dto.deliveryGender,
+          )
+        : null;
+
     const forceRetail = !canViewCostPrices(user);
     // خصم المخزون عند التأكيد لطلبات فيسبوك/الموقع؛ POS يخصم فوراً
     const deductStock =
@@ -251,7 +265,9 @@ export class OrdersService {
 
       const subtotal = items.reduce((sum, i) => sum + Number(i.lineTotal), 0);
       const discountAmount = dto.discountAmount ?? 0;
-      const deliveryFee = dto.deliveryFee ?? 0;
+      const deliveryFee = deliveryQuote
+        ? deliveryQuote.deliveryFee
+        : (dto.deliveryFee ?? 0);
       const totalAmount = subtotal - discountAmount + deliveryFee;
       const orderNumber = await this.nextOrderNumber(tx);
       const orderBarcode = orderNumber;
@@ -263,10 +279,14 @@ export class OrdersService {
           source: dto.source,
           status: 'NEW',
           paymentMethod: dto.paymentMethod ?? 'COD',
-          deliveryType: dto.deliveryType ?? 'INTERNAL',
+          deliveryType:
+            dto.deliveryType ??
+            (deliveryQuote?.deliveryType as 'INTERNAL' | 'EXTERNAL' | undefined) ??
+            'INTERNAL',
           fulfillmentType: (() => {
             const t =
               dto.deliveryType ||
+              deliveryQuote?.deliveryType ||
               (findDeliveryCity(dto.city || undefined).mode === 'OWN_AGENTS'
                 ? 'INTERNAL'
                 : 'EXTERNAL');
@@ -275,6 +295,7 @@ export class OrdersService {
           localStatus: (() => {
             const t =
               dto.deliveryType ||
+              deliveryQuote?.deliveryType ||
               (findDeliveryCity(dto.city || undefined).mode === 'OWN_AGENTS'
                 ? 'INTERNAL'
                 : 'EXTERNAL');
@@ -299,9 +320,17 @@ export class OrdersService {
           shippingPhone: dto.shippingPhone ?? dto.customerPhone,
           city: dto.city,
           area: dto.area,
+          deliveryGender: deliveryQuote?.gender || dto.deliveryGender || undefined,
           address: dto.address,
           landmark: dto.landmark,
-          notes: dto.notes,
+          notes: [
+            dto.notes?.trim(),
+            deliveryQuote?.gender
+              ? `توصيل ${deliveryGenderLabelAr(deliveryQuote.gender)}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' | ') || undefined,
           items: {
             create: items.map(({ trackStock: _t, ...line }) => line),
           },

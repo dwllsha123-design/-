@@ -11,11 +11,14 @@ import {
   BulkSlipsDto,
   CreateDeliveryCompanyDto,
   UpdateDeliveryStatusDto,
+  UpdateDeliveryZoneDto,
+  UpsertDeliveryZoneDto,
 } from './dto/delivery.dto';
 
 import { ROLE_CODES } from '../../common/permissions';
 import {
   findDeliveryCity,
+  TRIPOLI_AREAS,
 } from '../../common/delivery/delivery-zones';
 import { StoreService } from '../store/store.service';
 import { AccuratessService } from './accuratess.service';
@@ -38,8 +41,114 @@ export class DeliveryService {
     private readonly notifications: NotificationsService,
   ) {}
 
-  quote(city?: string, area?: string) {
-    return this.storeService.resolveDelivery(city, area);
+  quote(city?: string, area?: string, gender?: string) {
+    return this.storeService.resolveDelivery(city, area, gender);
+  }
+
+  async ensureTripoliZones() {
+    const maleRow = await this.prisma.setting.findUnique({
+      where: { key: 'store.delivery_fee_tripoli' },
+    });
+    const femaleRow = await this.prisma.setting.findUnique({
+      where: { key: 'store.delivery_fee_tripoli_female' },
+    });
+    const maleFee = Number(maleRow?.value || 15);
+    const femaleFee = Number(femaleRow?.value || 20);
+    for (const [i, a] of TRIPOLI_AREAS.entries()) {
+      await this.prisma.deliveryZone.upsert({
+        where: { city_area: { city: 'طرابلس', area: a.nameAr } },
+        create: {
+          city: 'طرابلس',
+          area: a.nameAr,
+          maleFee,
+          femaleFee,
+          sortOrder: i,
+          isActive: true,
+        },
+        update: {},
+      });
+    }
+  }
+
+  async listZones() {
+    const count = await this.prisma.deliveryZone.count({ where: { city: 'طرابلس' } });
+    if (count === 0) {
+      await this.ensureTripoliZones();
+    }
+    return this.prisma.deliveryZone.findMany({
+      orderBy: [{ city: 'asc' }, { sortOrder: 'asc' }, { area: 'asc' }],
+    });
+  }
+
+  async upsertZone(dto: UpsertDeliveryZoneDto) {
+    const city = (dto.city || 'طرابلس').trim() || 'طرابلس';
+    const area = dto.area.trim();
+    if (!area) {
+      throw new BadRequestException('أدخل اسم المنطقة');
+    }
+    const count = await this.prisma.deliveryZone.count({ where: { city } });
+    return this.prisma.deliveryZone.upsert({
+      where: { city_area: { city, area } },
+      create: {
+        city,
+        area,
+        maleFee: dto.maleFee,
+        femaleFee: dto.femaleFee,
+        sortOrder: dto.sortOrder ?? count,
+        isActive: dto.isActive ?? true,
+      },
+      update: {
+        maleFee: dto.maleFee,
+        femaleFee: dto.femaleFee,
+        isActive: dto.isActive ?? true,
+        ...(dto.sortOrder != null ? { sortOrder: dto.sortOrder } : {}),
+      },
+    });
+  }
+
+  async updateZone(id: string, dto: UpdateDeliveryZoneDto) {
+    const existing = await this.prisma.deliveryZone.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('المنطقة غير موجودة');
+    }
+    if (dto.area && dto.area.trim() !== existing.area) {
+      const clash = await this.prisma.deliveryZone.findUnique({
+        where: { city_area: { city: existing.city, area: dto.area.trim() } },
+      });
+      if (clash && clash.id !== id) {
+        throw new BadRequestException('هذه المنطقة مسجّلة مسبقاً');
+      }
+    }
+    return this.prisma.deliveryZone.update({
+      where: { id },
+      data: {
+        ...(dto.area ? { area: dto.area.trim() } : {}),
+        ...(dto.maleFee != null ? { maleFee: dto.maleFee } : {}),
+        ...(dto.femaleFee != null ? { femaleFee: dto.femaleFee } : {}),
+        ...(dto.sortOrder != null ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.isActive != null ? { isActive: dto.isActive } : {}),
+      },
+    });
+  }
+
+  async deactivateZone(id: string) {
+    const existing = await this.prisma.deliveryZone.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('المنطقة غير موجودة');
+    }
+    return this.prisma.deliveryZone.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async deleteZone(id: string) {
+    const existing = await this.prisma.deliveryZone.findUnique({ where: { id } });
+    if (!existing) {
+      throw new NotFoundException('المنطقة غير موجودة');
+    }
+    await this.prisma.deliveryZone.delete({ where: { id } });
+    return { ok: true };
   }
 
   private isAdmin(user: AuthUser) {
@@ -93,6 +202,7 @@ export class DeliveryService {
             address: true,
             totalAmount: true,
             deliveryType: true,
+            deliveryGender: true,
             deliveryFee: true,
             pagePublicCode: true,
             fulfillmentType: true,
@@ -154,6 +264,7 @@ export class DeliveryService {
         area: true,
         address: true,
         deliveryType: true,
+        deliveryGender: true,
         fulfillmentType: true,
         localStatus: true,
         courierId: true,

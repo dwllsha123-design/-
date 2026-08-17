@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -81,4 +82,53 @@ export class BulkSlipsDto {
   @IsOptional()
   @IsString()
   facebookPageId?: string;
+}
+
+export class UpsertDeliveryZoneDto {
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsString()
+  area!: string;
+
+  @IsNumber()
+  @Min(0)
+  maleFee!: number;
+
+  @IsNumber()
+  @Min(0)
+  femaleFee!: number;
+
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateDeliveryZoneDto {
+  @IsOptional()
+  @IsString()
+  area?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maleFee?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  femaleFee?: number;
+
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

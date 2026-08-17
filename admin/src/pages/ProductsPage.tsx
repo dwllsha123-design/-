@@ -3,15 +3,17 @@ import { api, apiUpload, money, statusBadgeClass } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 
 type Category = { id: string; nameAr: string; slug: string };
-type ProductImage = { id: string; url: string; isPrimary: boolean };
+type ProductImage = { id: string; url: string; isPrimary: boolean; color?: string | null };
 type Variant = {
   id: string;
   sku: string;
   barcode?: string | null;
   color?: string | null;
   size?: string | null;
+  imageUrl?: string | null;
   retailPrice: number;
   price?: number;
+  available?: number;
 };
 type Product = {
   id: string;
@@ -28,9 +30,178 @@ type Product = {
   images?: ProductImage[];
   variants: Variant[];
 };
-type VariantDraft = { size: string; color: string; sku: string; retailPrice: string };
+type VariantDraft = {
+  size: string;
+  color: string;
+  sku: string;
+  retailPrice: string;
+  imageUrl: string;
+  imageFile: File | null;
+  quantity: string;
+};
+type ColorGroup = {
+  color: string;
+  imageUrl: string;
+  imageFile: File | null;
+  preview: string;
+  sizes: string[];
+  qtyBySize: Record<string, string>;
+  quantity: string;
+};
 
-const emptyVariant = (): VariantDraft => ({ size: '', color: '', sku: '', retailPrice: '' });
+const emptyVariant = (): VariantDraft => ({
+  size: '',
+  color: '',
+  sku: '',
+  retailPrice: '',
+  imageUrl: '',
+  imageFile: null,
+  quantity: '0',
+});
+
+function emptyColorGroup(color: string): ColorGroup {
+  return {
+    color,
+    imageUrl: '',
+    imageFile: null,
+    preview: '',
+    sizes: [],
+    qtyBySize: {},
+    quantity: '0',
+  };
+}
+
+const SIZE_OPTIONS = [
+  { value: 'S', wide: false },
+  { value: 'M', wide: false },
+  { value: 'L', wide: false },
+  { value: 'XL', wide: false },
+  { value: '2XL', wide: false },
+  { value: '3XL', wide: false },
+  { value: '4XL', wide: false },
+  { value: '5XL', wide: false },
+  { value: 'Big size', wide: true },
+  { value: 'Free size', wide: true },
+] as const;
+
+const COLOR_OPTIONS = [
+  { name: 'أسود', hex: '#1a1a1a', light: false },
+  { name: 'أبيض', hex: '#f7f7f7', light: true },
+  { name: 'رمادي', hex: '#8a8a8a', light: false },
+  { name: 'بيج', hex: '#d8c3a5', light: true },
+  { name: 'كريمي', hex: '#f4ead5', light: true },
+  { name: 'نود', hex: '#e0b7a0', light: true },
+  { name: 'بني', hex: '#6b3f2a', light: false },
+  { name: 'ذهبي', hex: '#c9a227', light: true },
+  { name: 'فضي', hex: '#c0c0c0', light: true },
+  { name: 'أحمر', hex: '#c4392b', light: false },
+  { name: 'عنابي', hex: '#7b1e3c', light: false },
+  { name: 'وردي', hex: '#e89bb0', light: true },
+  { name: 'كحلي', hex: '#1e3a5f', light: false },
+  { name: 'أزرق', hex: '#3b6ea5', light: false },
+  { name: 'أخضر', hex: '#3d7a5a', light: false },
+  { name: 'زيتي', hex: '#6b6e3a', light: false },
+  { name: 'بنفسجي', hex: '#6b4c8a', light: false },
+  { name: 'برتقالي', hex: '#d96c2c', light: false },
+  { name: 'أصفر', hex: '#e4c44a', light: true },
+  {
+    name: 'ملون',
+    hex: 'conic-gradient(#c4392b, #e4c44a, #3d7a5a, #3b6ea5, #6b4c8a, #c4392b)',
+    light: false,
+  },
+] as const;
+
+function colorHex(name?: string | null) {
+  if (!name) return '';
+  return COLOR_OPTIONS.find((c) => c.name === name)?.hex || '';
+}
+
+function toggleValue(current: string, next: string) {
+  return current === next ? '' : next;
+}
+
+function SizePicker({
+  value,
+  values,
+  multi,
+  onChange,
+  onToggle,
+}: {
+  value?: string;
+  values?: string[];
+  multi?: boolean;
+  onChange?: (size: string) => void;
+  onToggle?: (size: string) => void;
+}) {
+  const selected = multi ? values || [] : value ? [value] : [];
+  return (
+    <div>
+      <div style={{ marginBottom: 8, fontSize: 13 }}>المقاس</div>
+      <div className="size-pills" role="listbox" aria-label="المقاس">
+        {SIZE_OPTIONS.map((s) => {
+          const on = selected.includes(s.value);
+          return (
+            <button
+              key={s.value}
+              type="button"
+              className={`size-pill${s.wide ? ' wide' : ''}${on ? ' active' : ''}`}
+              aria-pressed={on}
+              onClick={() =>
+                multi ? onToggle?.(s.value) : onChange?.(toggleValue(value || '', s.value))
+              }
+            >
+              {s.value}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ColorPicker({
+  value,
+  values,
+  multi,
+  onChange,
+  onToggle,
+}: {
+  value?: string;
+  values?: string[];
+  multi?: boolean;
+  onChange?: (color: string) => void;
+  onToggle?: (color: string) => void;
+}) {
+  const selected = multi ? values || [] : value ? [value] : [];
+  return (
+    <div>
+      <div style={{ marginBottom: 8, fontSize: 13 }}>
+        اللون{!multi && value ? ` — ${value}` : multi ? ' — اختاري لوناً أو أكثر' : ''}
+      </div>
+      <div className="color-swatches" role="listbox" aria-label="اللون">
+        {COLOR_OPTIONS.map((c) => {
+          const on = selected.includes(c.name);
+          return (
+            <button
+              key={c.name}
+              type="button"
+              title={c.name}
+              aria-label={c.name}
+              aria-pressed={on}
+              className={`color-swatch${c.light ? ' light' : ''}${on ? ' active' : ''}`}
+              style={{ background: c.hex }}
+              onClick={() =>
+                multi ? onToggle?.(c.name) : onChange?.(toggleValue(value || '', c.name))
+              }
+            >
+              {on ? <span className="tick">✓</span> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function printBarcodes(
   labels: Array<{ barcode: string; productName: string; sku: string; size?: string | null; color?: string | null }>,
@@ -83,9 +254,10 @@ export function ProductsPage() {
   const [categoryId, setCategoryId] = useState('');
   const [imageUrls, setImageUrls] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [variants, setVariants] = useState<VariantDraft[]>([emptyVariant()]);
+  const [colorGroups, setColorGroups] = useState<ColorGroup[]>([]);
   const [newVar, setNewVar] = useState<VariantDraft>(emptyVariant());
   const [imageUrl, setImageUrl] = useState('');
+  const [imageColor, setImageColor] = useState('');
 
   async function load() {
     const [data, cats] = await Promise.all([
@@ -124,21 +296,49 @@ export function ProductsPage() {
     setCategoryId('');
     setImageUrls('');
     setPendingFiles([]);
-    setVariants([emptyVariant()]);
+    setColorGroups([]);
+  }
+
+  function toggleColorGroup(color: string) {
+    setColorGroups((prev) =>
+      prev.some((g) => g.color === color)
+        ? prev.filter((g) => g.color !== color)
+        : [...prev, emptyColorGroup(color)],
+    );
+  }
+
+  function updateColorGroup(color: string, patch: Partial<ColorGroup>) {
+    setColorGroups((prev) => prev.map((g) => (g.color === color ? { ...g, ...patch } : g)));
+  }
+
+  function toggleGroupSize(color: string, size: string) {
+    setColorGroups((prev) =>
+      prev.map((g) => {
+        if (g.color !== color) return g;
+        const sizes = g.sizes.includes(size)
+          ? g.sizes.filter((s) => s !== size)
+          : [...g.sizes, size];
+        const qtyBySize = { ...g.qtyBySize };
+        if (!qtyBySize[size]) qtyBySize[size] = g.quantity || '0';
+        return { ...g, sizes, qtyBySize };
+      }),
+    );
   }
 
   async function onCreate(e: FormEvent) {
     e.preventDefault();
     setError('');
     try {
-      const variantPayload = variants
-        .filter((v) => v.size || v.color || v.sku || v.retailPrice)
-        .map((v) => ({
-          size: v.size || undefined,
-          color: v.color || undefined,
-          sku: v.sku || undefined,
-          retailPrice: Number(v.retailPrice || retailPrice || 0),
+      const variantPayload = colorGroups.flatMap((g) => {
+        const sizes = g.sizes.length ? g.sizes : [''];
+        return sizes.map((size) => ({
+          color: g.color,
+          size: size || undefined,
+          imageUrl: g.imageUrl || undefined,
+          quantity: Number((size ? g.qtyBySize[size] : g.quantity) || 0),
+          retailPrice: Number(retailPrice || 0),
         }));
+      });
       const created = await api<Product>('/products', {
         method: 'POST',
         body: JSON.stringify({
@@ -159,6 +359,13 @@ export function ProductsPage() {
       });
       for (const file of pendingFiles) {
         await apiUpload(`/products/${created.id}/images/upload`, file);
+      }
+      for (const g of colorGroups) {
+        if (!g.imageFile) continue;
+        await apiUpload(
+          `/products/${created.id}/images/upload?color=${encodeURIComponent(g.color)}`,
+          g.imageFile,
+        );
       }
       resetForm();
       setShowCreate(false);
@@ -195,26 +402,35 @@ export function ProductsPage() {
 
   async function addSize(productId: string) {
     if (!newVar.size && !newVar.color) {
-      setError('أدخلي المقاس أو اللون');
+      setError('اختاري المقاس أو اللون');
       return;
     }
     setError('');
     const product = products.find((p) => p.id === productId);
-    await api(`/products/${productId}/variants`, {
+    const created = await api<Variant>(`/products/${productId}/variants`, {
       method: 'POST',
       body: JSON.stringify({
         size: newVar.size || undefined,
         color: newVar.color || undefined,
         sku: newVar.sku || undefined,
+        imageUrl: newVar.imageUrl || undefined,
+        quantity: Number(newVar.quantity || 0),
         retailPrice: Number(newVar.retailPrice || product?.retailPrice || 0),
       }),
     });
+    if (newVar.imageFile && (newVar.color || created?.id)) {
+      await apiUpload(
+        `/products/${productId}/images/upload${newVar.color ? `?color=${encodeURIComponent(newVar.color)}` : ''}`,
+        newVar.imageFile,
+      );
+    }
     setNewVar(emptyVariant());
     await load();
   }
 
-  async function uploadToProduct(productId: string, file: File) {
-    await apiUpload(`/products/${productId}/images/upload`, file);
+  async function uploadToProduct(productId: string, file: File, color?: string) {
+    const qs = color ? `?color=${encodeURIComponent(color)}` : '';
+    await apiUpload(`/products/${productId}/images/upload${qs}`, file);
     await load();
   }
 
@@ -222,9 +438,13 @@ export function ProductsPage() {
     if (!imageUrl.trim()) return;
     await api(`/products/${productId}/images`, {
       method: 'POST',
-      body: JSON.stringify({ url: imageUrl.trim() }),
+      body: JSON.stringify({
+        url: imageUrl.trim(),
+        color: imageColor || undefined,
+      }),
     });
     setImageUrl('');
+    setImageColor('');
     await load();
   }
 
@@ -238,7 +458,7 @@ export function ProductsPage() {
       <div className="topbar">
         <div className="page-title">
           <h1>إدارة المنتجات</h1>
-          <p>من هنا تضيفين منتجاتك: الاسم، الصور، السعر، المقاسات. يُولَّد كود DA-xxxx وباركود تلقائياً لكل مقاس مع إمكانية الطباعة.</p>
+          <p>من هنا تضيفين منتجاتك: الألوان بصورها، المقاسات، المخزون، والباركود الفريد لكل لون/مقاس.</p>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {canEdit ? (
@@ -359,52 +579,97 @@ export function ProductsPage() {
             />
           </label>
           <div style={{ gridColumn: '1 / -1' }}>
-            <strong>المقاسات / الألوان</strong>
+            <strong>الألوان والمقاسات والمخزون</strong>
             <p style={{ margin: '6px 0 10px', fontSize: 13 }}>
-              أضيفي كل مقاس في صف. يُصدر باركود تلقائياً لكل صف عند الحفظ.
+              اختاري الألوان. لكل لون صورة مستقلة وكمية مخزون وباركود يُولَّد تلقائياً. إن اخترتِ عدة مقاسات يُنشأ صف لكل مقاس تحت نفس اللون.
             </p>
-            {variants.map((v, idx) => (
-              <div key={idx} className="form-grid two" style={{ marginBottom: 8 }}>
-                <input
-                  placeholder="المقاس (S / M / L / XL)"
-                  value={v.size}
-                  onChange={(e) =>
-                    setVariants((prev) => prev.map((x, i) => (i === idx ? { ...x, size: e.target.value } : x)))
-                  }
+            <ColorPicker
+              multi
+              values={colorGroups.map((g) => g.color)}
+              onToggle={toggleColorGroup}
+            />
+            {colorGroups.map((g) => (
+              <div key={g.color} className="variant-block">
+                <div className="variant-block-head">
+                  <span className="color-chip">
+                    <span className="color-dot" style={{ background: colorHex(g.color) || '#ccc' }} />
+                    {g.color}
+                  </span>
+                  <button className="btn ghost" type="button" onClick={() => toggleColorGroup(g.color)}>
+                    حذف اللون
+                  </button>
+                </div>
+                <div className="color-image-row">
+                  {g.preview || g.imageUrl ? (
+                    <img
+                      className="color-image-preview"
+                      src={g.preview || g.imageUrl}
+                      alt={g.color}
+                    />
+                  ) : (
+                    <div className="color-image-preview placeholder">بدون صورة</div>
+                  )}
+                  <div className="form-grid" style={{ flex: 1 }}>
+                    <label>
+                      صورة هذا اللون — رفع من الجهاز
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          updateColorGroup(g.color, {
+                            imageFile: file,
+                            preview: file ? URL.createObjectURL(file) : '',
+                          });
+                        }}
+                      />
+                    </label>
+                    <label>
+                      أو رابط صورة هذا اللون
+                      <input
+                        value={g.imageUrl}
+                        placeholder="https://..."
+                        onChange={(e) => updateColorGroup(g.color, { imageUrl: e.target.value })}
+                      />
+                    </label>
+                  </div>
+                </div>
+                <SizePicker
+                  multi
+                  values={g.sizes}
+                  onToggle={(size) => toggleGroupSize(g.color, size)}
                 />
-                <input
-                  placeholder="اللون"
-                  value={v.color}
-                  onChange={(e) =>
-                    setVariants((prev) => prev.map((x, i) => (i === idx ? { ...x, color: e.target.value } : x)))
-                  }
-                />
-                <input
-                  placeholder="تلقائي DA-xxxx"
-                  value={v.sku}
-                  onChange={(e) =>
-                    setVariants((prev) => prev.map((x, i) => (i === idx ? { ...x, sku: e.target.value } : x)))
-                  }
-                />
-                <input
-                  type="number"
-                  placeholder={`سعر هذا المقاس (أو ${retailPrice})`}
-                  value={v.retailPrice}
-                  onChange={(e) =>
-                    setVariants((prev) =>
-                      prev.map((x, i) => (i === idx ? { ...x, retailPrice: e.target.value } : x)),
-                    )
-                  }
-                />
+                {g.sizes.length ? (
+                  <div className="form-grid two">
+                    {g.sizes.map((size) => (
+                      <label key={size}>
+                        مخزون {g.color} / {size}
+                        <input
+                          type="number"
+                          min={0}
+                          value={g.qtyBySize[size] ?? '0'}
+                          onChange={(e) =>
+                            updateColorGroup(g.color, {
+                              qtyBySize: { ...g.qtyBySize, [size]: e.target.value },
+                            })
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <label>
+                    مخزون هذا اللون (بدون تمييز مقاس)
+                    <input
+                      type="number"
+                      min={0}
+                      value={g.quantity}
+                      onChange={(e) => updateColorGroup(g.color, { quantity: e.target.value })}
+                    />
+                  </label>
+                )}
               </div>
             ))}
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={() => setVariants((prev) => [...prev, emptyVariant()])}
-            >
-              + مقاس آخر
-            </button>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="btn" type="submit">
@@ -483,11 +748,18 @@ export function ProductsPage() {
                                 <div key={img.id} style={{ position: 'relative' }}>
                                   <img
                                     src={img.url}
-                                    alt=""
+                                    alt={img.color || ''}
                                     width={72}
                                     height={90}
                                     style={{ objectFit: 'cover', borderRadius: 8 }}
                                   />
+                                  {img.color ? (
+                                    <div style={{ fontSize: 12, marginTop: 4 }}>{img.color}</div>
+                                  ) : (
+                                    <div style={{ fontSize: 12, marginTop: 4, color: 'var(--on-surface-variant)' }}>
+                                      عامة
+                                    </div>
+                                  )}
                                   {canEdit ? (
                                     <button
                                       type="button"
@@ -502,15 +774,27 @@ export function ProductsPage() {
                               ))}
                             </div>
                             {canEdit ? (
-                              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'end' }}>
                                 <input
                                   type="file"
                                   accept="image/*"
                                   onChange={(e) => {
                                     const f = e.target.files?.[0];
-                                    if (f) void uploadToProduct(p.id, f);
+                                    if (f) void uploadToProduct(p.id, f, imageColor || undefined);
                                   }}
                                 />
+                                <select
+                                  value={imageColor}
+                                  onChange={(e) => setImageColor(e.target.value)}
+                                  style={{ minWidth: 140 }}
+                                >
+                                  <option value="">صورة عامة</option>
+                                  {COLOR_OPTIONS.map((c) => (
+                                    <option key={c.name} value={c.name}>
+                                      لون: {c.name}
+                                    </option>
+                                  ))}
+                                </select>
                                 <input
                                   placeholder="رابط صورة"
                                   value={imageUrl}
@@ -523,13 +807,15 @@ export function ProductsPage() {
                             ) : null}
                           </div>
                           <div>
-                            <strong>المقاسات والباركود</strong>
+                            <strong>المتغيرات — مخزون وباركود لكل لون/مقاس</strong>
                             <table>
                               <thead>
                                 <tr>
+                                  <th>صورة</th>
                                   <th>المقاس</th>
                                   <th>اللون</th>
                                   <th>SKU</th>
+                                  <th>المخزون</th>
                                   <th>السعر</th>
                                   <th>الباركود</th>
                                   <th></th>
@@ -538,9 +824,37 @@ export function ProductsPage() {
                               <tbody>
                                 {p.variants.map((v) => (
                                   <tr key={v.id}>
+                                    <td>
+                                      {v.imageUrl ? (
+                                        <img
+                                          src={v.imageUrl}
+                                          alt={v.color || ''}
+                                          width={36}
+                                          height={46}
+                                          style={{ objectFit: 'cover', borderRadius: 6 }}
+                                        />
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
                                     <td>{v.size || '—'}</td>
-                                    <td>{v.color || '—'}</td>
+                                    <td>
+                                      {v.color ? (
+                                        <span className="color-chip">
+                                          {colorHex(v.color) ? (
+                                            <span
+                                              className="color-dot"
+                                              style={{ background: colorHex(v.color) }}
+                                            />
+                                          ) : null}
+                                          {v.color}
+                                        </span>
+                                      ) : (
+                                        '—'
+                                      )}
+                                    </td>
                                     <td>{v.sku}</td>
+                                    <td>{v.available ?? '—'}</td>
                                     <td>{money(v.retailPrice ?? v.price ?? 0)}</td>
                                     <td>
                                       <code>{v.barcode || '—'}</code>
@@ -579,25 +893,71 @@ export function ProductsPage() {
                               </tbody>
                             </table>
                             {canEdit ? (
-                              <div className="form-grid two" style={{ marginTop: 10 }}>
-                                <input
-                                  placeholder="مقاس جديد"
-                                  value={newVar.size}
-                                  onChange={(e) => setNewVar((x) => ({ ...x, size: e.target.value }))}
-                                />
-                                <input
-                                  placeholder="لون"
+                              <div className="variant-block" style={{ marginTop: 10 }}>
+                                <ColorPicker
                                   value={newVar.color}
-                                  onChange={(e) => setNewVar((x) => ({ ...x, color: e.target.value }))}
+                                  onChange={(color) => setNewVar((x) => ({ ...x, color }))}
                                 />
-                                <input
-                                  placeholder="سعر هذا المقاس"
-                                  type="number"
-                                  value={newVar.retailPrice}
-                                  onChange={(e) => setNewVar((x) => ({ ...x, retailPrice: e.target.value }))}
+                                <SizePicker
+                                  value={newVar.size}
+                                  onChange={(size) => setNewVar((x) => ({ ...x, size }))}
                                 />
+                                <div className="color-image-row">
+                                  {newVar.imageFile ? (
+                                    <img
+                                      className="color-image-preview"
+                                      src={URL.createObjectURL(newVar.imageFile)}
+                                      alt=""
+                                    />
+                                  ) : newVar.imageUrl ? (
+                                    <img className="color-image-preview" src={newVar.imageUrl} alt="" />
+                                  ) : null}
+                                  <div className="form-grid" style={{ flex: 1 }}>
+                                    <label>
+                                      صورة اللون
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) =>
+                                          setNewVar((x) => ({
+                                            ...x,
+                                            imageFile: e.target.files?.[0] || null,
+                                          }))
+                                        }
+                                      />
+                                    </label>
+                                    <label>
+                                      أو رابط الصورة
+                                      <input
+                                        value={newVar.imageUrl}
+                                        onChange={(e) => setNewVar((x) => ({ ...x, imageUrl: e.target.value }))}
+                                      />
+                                    </label>
+                                  </div>
+                                </div>
+                                <div className="form-grid two">
+                                  <label>
+                                    الكمية الابتدائية
+                                    <input
+                                      placeholder="مخزون هذا اللون/المقاس"
+                                      type="number"
+                                      min={0}
+                                      value={newVar.quantity}
+                                      onChange={(e) => setNewVar((x) => ({ ...x, quantity: e.target.value }))}
+                                    />
+                                  </label>
+                                  <label>
+                                    السعر
+                                    <input
+                                      placeholder="سعر هذا المقاس"
+                                      type="number"
+                                      value={newVar.retailPrice}
+                                      onChange={(e) => setNewVar((x) => ({ ...x, retailPrice: e.target.value }))}
+                                    />
+                                  </label>
+                                </div>
                                 <button className="btn secondary" type="button" onClick={() => void addSize(p.id)}>
-                                  إضافة مقاس + باركود
+                                  إضافة اللون/المقاس + باركود ومخزون
                                 </button>
                               </div>
                             ) : null}

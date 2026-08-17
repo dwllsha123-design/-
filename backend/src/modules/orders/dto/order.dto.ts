@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEnum,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -112,6 +113,10 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   area?: string;
+
+  @IsOptional()
+  @IsIn(['MALE', 'FEMALE'])
+  deliveryGender?: 'MALE' | 'FEMALE';
 
   @IsOptional()
   @IsString()

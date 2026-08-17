@@ -14,6 +14,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { join } from 'path';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { imageUploadOptions } from '../../common/image-upload';
 import { ProductsService } from './products.service';
 import {
   AddProductImageDto,
@@ -75,25 +76,26 @@ export class ProductsController {
   @Post(':id/images')
   @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
   addImage(@Param('id') id: string, @Body() dto: AddProductImageDto) {
-    return this.productsService.addImage(id, dto.url, dto.isPrimary);
+    return this.productsService.addImage(id, dto.url, dto.isPrimary, dto.color);
   }
 
   @Post(':id/images/upload')
   @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileInterceptor('file', {
-      dest: join(process.cwd(), 'uploads', 'products'),
-      limits: { fileSize: 6 * 1024 * 1024 },
-    }),
+    FileInterceptor(
+      'file',
+      imageUploadOptions(join(process.cwd(), 'uploads', 'products')),
+    ),
   )
   uploadImage(
     @Param('id') id: string,
+    @Query('color') color?: string,
     @UploadedFile()
     file?: { filename: string; originalname: string; mimetype: string; buffer?: Buffer },
   ) {
     if (!file?.filename && !file?.buffer) throw new BadRequestException('اختاري صورة للرفع');
-    return this.productsService.uploadImage(id, file);
+    return this.productsService.uploadImage(id, file, color);
   }
 
   @Delete(':id/images/:imageId')

@@ -13,6 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { join } from 'path';
+import { imageUploadOptions } from '../../common/image-upload';
 import {
   MarketingService,
 } from './marketing.service';
@@ -98,10 +99,10 @@ export class MarketingController {
   @RequirePermissions(PERMISSIONS.MARKETING_MANAGE)
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(
-    FileInterceptor('file', {
-      dest: join(process.cwd(), 'uploads', 'banners'),
-      limits: { fileSize: 6 * 1024 * 1024 },
-    }),
+    FileInterceptor(
+      'file',
+      imageUploadOptions(join(process.cwd(), 'uploads', 'banners')),
+    ),
   )
   uploadBannerImage(
     @Param('id') id: string,

@@ -11,13 +11,14 @@ export type StoreProduct = {
   compareAtPrice: number | null;
   discountPercent: number;
   currency: string;
-  images: Array<{ url: string; alt?: string | null; isPrimary: boolean }>;
+  images: Array<{ url: string; alt?: string | null; isPrimary: boolean; color?: string | null }>;
   variants: Array<{
     id: string;
     sku: string;
     color?: string | null;
     size?: string | null;
     nameAr?: string | null;
+    imageUrl?: string | null;
     retailPrice: number;
     inStock: boolean;
   }>;

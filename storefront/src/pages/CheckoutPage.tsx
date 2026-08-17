@@ -9,6 +9,8 @@ type DeliveryCity = {
   mode: string;
   deliveryType: string;
   areas: string[];
+  requiresGender?: boolean;
+  areaDetails?: Array<{ nameAr: string; maleFee: number; femaleFee: number }>;
 };
 
 type Quote = {
@@ -16,6 +18,10 @@ type Quote = {
   labelAr: string;
   deliveryType: string;
   mode: string;
+  gender?: 'MALE' | 'FEMALE' | null;
+  maleFee?: number | null;
+  femaleFee?: number | null;
+  requiresGender?: boolean;
 };
 
 type Profile = {
@@ -48,6 +54,7 @@ export function CheckoutPage() {
   const [promoMsg, setPromoMsg] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deliveryGender, setDeliveryGender] = useState<'MALE' | 'FEMALE'>('FEMALE');
 
   useEffect(() => {
     api<{ cities: DeliveryCity[]; notes?: { internal?: string; external?: string } }>(
@@ -90,15 +97,19 @@ export function CheckoutPage() {
     () => cities.find((c) => c.nameAr === city)?.areas || [],
     [cities, city],
   );
+  const currentCity = cities.find((c) => c.nameAr === city);
+  const requiresGender = Boolean(currentCity?.requiresGender);
+  const areaDetail = currentCity?.areaDetails?.find((a) => a.nameAr === area);
 
   useEffect(() => {
     if (!city) return;
     const qs = new URLSearchParams({ city });
     if (area) qs.set('area', area);
+    if (requiresGender) qs.set('gender', deliveryGender);
     api<Quote>(`/store/delivery-quote?${qs}`)
       .then(setQuote)
       .catch(() => undefined);
-  }, [city, area]);
+  }, [city, area, deliveryGender, requiresGender]);
 
   if (!items.length) {
     return <div className="container section empty">السلة فارغة</div>;
@@ -129,6 +140,10 @@ export function CheckoutPage() {
       setError('اختاري المنطقة لإظهار سعر التوصيل');
       return;
     }
+    if (requiresGender && !deliveryGender) {
+      setError('اختاري نوع المندوب لحساب سعر التوصيل');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -148,6 +163,7 @@ export function CheckoutPage() {
           phone,
           city,
           area,
+          deliveryGender: requiresGender ? deliveryGender : undefined,
           landmark,
           notes,
           paymentMethod,
@@ -211,6 +227,33 @@ export function CheckoutPage() {
             ))}
           </select>
         </label>
+        {requiresGender ? (
+          <label style={{ gridColumn: '1 / -1' }}>
+            نوع المندوب
+            <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className={deliveryGender === 'FEMALE' ? 'btn' : 'btn secondary'}
+                onClick={() => setDeliveryGender('FEMALE')}
+              >
+                مندوبة نسائية
+                {areaDetail || quote?.femaleFee != null
+                  ? ` — ${money(areaDetail?.femaleFee ?? quote?.femaleFee ?? 0)}`
+                  : ''}
+              </button>
+              <button
+                type="button"
+                className={deliveryGender === 'MALE' ? 'btn' : 'btn secondary'}
+                onClick={() => setDeliveryGender('MALE')}
+              >
+                مندوب رجالي
+                {areaDetail || quote?.maleFee != null
+                  ? ` — ${money(areaDetail?.maleFee ?? quote?.maleFee ?? 0)}`
+                  : ''}
+              </button>
+            </div>
+          </label>
+        ) : null}
         <label>
           أقرب نقطة دالة
           <input value={landmark} onChange={(e) => setLandmark(e.target.value)} />

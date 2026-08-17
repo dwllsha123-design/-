@@ -16,7 +16,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET', 'change-me'),
+      secretOrKey: config.get<string>('JWT_SECRET') || 'dev-only-not-for-production',
     });
   }
 
@@ -24,7 +24,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: {
-        branch: true,
         roles: {
           include: {
             role: {
@@ -55,6 +54,23 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       ),
     ];
 
+    let branch: AuthUser['branch'] = null;
+    try {
+      const row = await this.prisma.branch.findUnique({ where: { userId: user.id } });
+      branch = row
+        ? {
+            id: row.id,
+            name: row.name,
+            username: row.username,
+            type: row.type,
+            isMain: row.isMain,
+            warehouseId: row.warehouseId,
+          }
+        : null;
+    } catch {
+      branch = null;
+    }
+
     return {
       id: user.id,
       name: user.name,
@@ -62,16 +78,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       phone: user.phone,
       roles,
       permissions,
-      branch: user.branch
-        ? {
-            id: user.branch.id,
-            name: user.branch.name,
-            username: user.branch.username,
-            type: user.branch.type,
-            isMain: user.branch.isMain,
-            warehouseId: user.branch.warehouseId,
-          }
-        : null,
+      branch,
     };
   }
 }

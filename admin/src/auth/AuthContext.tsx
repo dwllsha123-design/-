@@ -58,9 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await api<ApiUser>('/auth/me');
       setUser(me);
-    } catch {
-      setToken(null);
-      setUser(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '';
+      const keepSession = /table|does not exist|P2021|Invalid/i.test(message);
+      if (!keepSession) {
+        setToken(null);
+        setUser(null);
+      }
     } finally {
       setLoading(false);
     }

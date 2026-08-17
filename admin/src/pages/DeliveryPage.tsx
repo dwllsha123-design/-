@@ -43,6 +43,7 @@ type PendingOrder = {
   fulfillmentType?: string | null;
   localStatus?: string | null;
   deliveryFee: string | number;
+  deliveryGender?: 'MALE' | 'FEMALE' | null;
   totalAmount: string | number;
   status: string;
   facebookPage?: { id: string; name: string; publicCode: number } | null;
@@ -106,6 +107,10 @@ export function DeliveryPage() {
     const qs = new URLSearchParams();
     if (selected.city) qs.set('city', selected.city);
     if (selected.area) qs.set('area', selected.area);
+    if (selected.deliveryGender) qs.set('gender', selected.deliveryGender);
+    else if (selected.deliveryType === 'INTERNAL' || selected.fulfillmentType === 'INTERNAL') {
+      qs.set('gender', 'MALE');
+    }
     api<{ deliveryFee: number }>(`/delivery/quote?${qs}`)
       .then((q) => setFee(q.deliveryFee))
       .catch(() => undefined);

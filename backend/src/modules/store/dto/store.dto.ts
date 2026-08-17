@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEmail,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -62,6 +63,10 @@ export class StoreCheckoutDto {
   @IsOptional()
   @IsString()
   area?: string;
+
+  @IsOptional()
+  @IsIn(['MALE', 'FEMALE'])
+  deliveryGender?: 'MALE' | 'FEMALE';
 
   @IsOptional()
   @IsString()

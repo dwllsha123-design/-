@@ -9,6 +9,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { StoreService } from './store.service';
 import {
   StoreCheckoutDto,
@@ -47,8 +48,12 @@ export class StoreController {
 
   @Public()
   @Get('delivery-quote')
-  deliveryQuote(@Query('city') city?: string, @Query('area') area?: string) {
-    return this.storeService.resolveDelivery(city, area);
+  deliveryQuote(
+    @Query('city') city?: string,
+    @Query('area') area?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.storeService.resolveDelivery(city, area, gender);
   }
 
   @Public()
@@ -74,6 +79,7 @@ export class StoreController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('auth/register')
   register(
     @Body() dto: StoreRegisterDto,
@@ -83,6 +89,7 @@ export class StoreController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
   @Post('auth/login')
   login(
     @Body() dto: LoginDto,
@@ -92,6 +99,7 @@ export class StoreController {
   }
 
   @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post('checkout')
   checkout(@Body() dto: StoreCheckoutDto) {
     return this.storeService.checkout(dto);

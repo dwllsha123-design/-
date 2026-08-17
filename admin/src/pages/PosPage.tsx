@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 
 type PriceMode = 'RETAIL' | 'WHOLESALE';
 
-.type ScannedVariant = {
+type ScannedVariant = {
   variantId: string;
   sku: string;
   barcode?: string | null;

@@ -30,6 +30,16 @@ export class CreateVariantDto {
   @IsString()
   size?: string;
 
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  /** الكمية الابتدائية لهذا المقاس/اللون في المخزن الرئيسي */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  quantity?: number;
+
   @IsNumber()
   @Min(0)
   retailPrice!: number;
@@ -112,6 +122,10 @@ export class AddProductImageDto {
   @IsOptional()
   @IsString()
   alt?: string;
+
+  @IsOptional()
+  @IsString()
+  color?: string;
 
   @IsOptional()
   @IsBoolean()

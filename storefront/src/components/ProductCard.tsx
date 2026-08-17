@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { money, type StoreProduct } from '../api/client';
 import { useCart, useFavorites } from '../cart/CartContext';
+import { storeColorHex } from '../lib/colors';
 
 const SIZE_LIMIT = 4;
 const COLOR_LIMIT = 5;
@@ -10,19 +11,33 @@ export function ProductCard({ product }: { product: StoreProduct }) {
   const fav = useFavorites();
   const { add } = useCart();
   const [added, setAdded] = useState(false);
+  const [previewColor, setPreviewColor] = useState<string | null>(null);
+
+  const previewImg =
+    (previewColor &&
+      (product.images.find((i) => i.color === previewColor)?.url ||
+        product.variants.find((v) => v.color === previewColor)?.imageUrl)) ||
+    '';
   const img =
-    product.images.find((i) => i.isPrimary)?.url || product.images[0]?.url || '';
+    previewImg ||
+    product.images.find((i) => i.isPrimary)?.url ||
+    product.images[0]?.url ||
+    '';
 
   const isNew =
     Boolean(product.createdAt) &&
     Date.now() - new Date(product.createdAt as string).getTime() < 1000 * 60 * 60 * 24 * 30;
 
-  const stockVariant = product.variants.find((v) => v.inStock);
+  const stockVariant =
+    (previewColor
+      ? product.variants.find((v) => v.color === previewColor && v.inStock) ||
+        product.variants.find((v) => v.color === previewColor)
+      : null) || product.variants.find((v) => v.inStock);
   const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))] as string[];
   const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[];
 
   function quickAdd() {
-    if (!stockVariant) return;
+    if (!stockVariant?.inStock) return;
     add({
       variantId: stockVariant.id,
       productId: product.id,
@@ -93,9 +108,15 @@ export function ProductCard({ product }: { product: StoreProduct }) {
         {colors.length ? (
           <div className="card-meta colors" aria-label="الألوان">
             {colors.slice(0, COLOR_LIMIT).map((c) => (
-              <span key={c} className="card-chip color" title={c}>
-                {c}
-              </span>
+              <button
+                key={c}
+                type="button"
+                className={`card-swatch${previewColor === c ? ' on' : ''}`}
+                title={c}
+                aria-label={c}
+                style={{ background: storeColorHex(c) || '#ccc' }}
+                onClick={() => setPreviewColor((prev) => (prev === c ? null : c))}
+              />
             ))}
             {colors.length > COLOR_LIMIT ? (
               <span className="card-chip more">+{colors.length - COLOR_LIMIT}</span>
@@ -113,7 +134,7 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           ) : null}
         </div>
 
-        {stockVariant ? (
+        {stockVariant?.inStock ? (
           <button className="card-add" type="button" onClick={quickAdd}>
             {added ? 'تمت الإضافة' : 'إضافة إلى السلة'}
           </button>

@@ -16,24 +16,64 @@ export type DeliveryCity = {
   areas: DeliveryArea[];
 };
 
+export type DeliveryGenderCode = 'MALE' | 'FEMALE';
+
+export function parseDeliveryGender(value?: string | null): DeliveryGenderCode | undefined {
+  const v = (value || '').trim().toUpperCase();
+  if (v === 'MALE' || v === 'M' || v === 'رجالي' || v === 'رجل') return 'MALE';
+  if (v === 'FEMALE' || v === 'F' || v === 'نسائي' || v === 'نساء') return 'FEMALE';
+  return undefined;
+}
+
+export function deliveryGenderLabelAr(gender: DeliveryGenderCode) {
+  return gender === 'FEMALE' ? 'نسائي' : 'رجالي';
+}
+
 export const TRIPOLI_AREAS: DeliveryArea[] = [
   { nameAr: 'المدينة القديمة' },
+  { nameAr: 'باب البحر' },
+  { nameAr: 'باب الجديد' },
+  { nameAr: 'الظهرة' },
   { nameAr: 'الدهماني' },
-  { nameAr: 'الهضبة' },
-  { nameAr: 'الفرناج' },
-  { nameAr: 'حي الأندلس' },
+  { nameAr: 'زاوية الدهماني' },
   { nameAr: 'النوفليين' },
   { nameAr: 'بن عاشور' },
   { nameAr: 'غوط الشعال' },
+  { nameAr: 'حي الأندلس' },
+  { nameAr: 'حي دمشق' },
+  { nameAr: 'الهضبة' },
+  { nameAr: 'الهضبة الشرقية' },
+  { nameAr: 'الهضبة الغربية' },
+  { nameAr: 'الفرناج' },
+  { nameAr: 'القرقارش' },
+  { nameAr: 'المنشية' },
+  { nameAr: 'سيدي المصري' },
+  { nameAr: 'باب عكارة' },
+  { nameAr: 'الصومعة' },
+  { nameAr: 'حي القدس' },
+  { nameAr: 'الهاني' },
+  { nameAr: 'صلاح الدين' },
+  { nameAr: 'الكريمية' },
+  { nameAr: 'فلاح' },
+  { nameAr: 'حي الإنطلاق' },
+  { nameAr: 'الزهور' },
+  { nameAr: 'السائح' },
+  { nameAr: 'وادي الربيع' },
+  { nameAr: 'حي الكويت' },
+  { nameAr: 'شط الهنشير' },
+  { nameAr: 'الثلاثاء' },
   { nameAr: 'أبو سليم' },
   { nameAr: 'عين زارة' },
-  { nameAr: 'تاجوراء' },
   { nameAr: 'سوق الجمعة' },
+  { nameAr: 'تاجوراء' },
   { nameAr: 'جنزور' },
   { nameAr: 'السراج' },
+  { nameAr: 'المعمورة' },
   { nameAr: 'قصر بن غشير' },
   { nameAr: 'السبعة' },
-  { nameAr: 'المعمورة' },
+  { nameAr: 'السواني' },
+  { nameAr: 'الماية' },
+  { nameAr: 'القره بوللي' },
   { nameAr: 'أخرى داخل طرابلس' },
 ];
 

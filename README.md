@@ -44,6 +44,11 @@ npm run dev
 ```
 http://localhost:5174
 
+### رفع على سيرفر حقيقي
+
+الخطوات كاملة في [deploy/README.md](deploy/README.md): Docker أو Nginx + PM2، مع لوحة التحكم على `/admin`.
+
+
 ### تطبيقات الجوال (لاحقاً)
 
 البنية جاهزة دون بناء الشاشات: `mobile/` و [Docs/MOBILE.md](Docs/MOBILE.md).  

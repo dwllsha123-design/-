@@ -1,7 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:3000/api/v1';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 export function RegisterMarketerPage() {
   const [name, setName] = useState('');

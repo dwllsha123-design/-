@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DeliveryService } from './delivery.service';
 import {
@@ -6,6 +6,8 @@ import {
   BulkSlipsDto,
   CreateDeliveryCompanyDto,
   UpdateDeliveryStatusDto,
+  UpdateDeliveryZoneDto,
+  UpsertDeliveryZoneDto,
 } from './dto/delivery.dto';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
@@ -22,8 +24,42 @@ export class DeliveryController {
 
   @Get('quote')
   @RequirePermissions(PERMISSIONS.ORDERS_VIEW)
-  quote(@Query('city') city?: string, @Query('area') area?: string) {
-    return this.deliveryService.quote(city, area);
+  quote(
+    @Query('city') city?: string,
+    @Query('area') area?: string,
+    @Query('gender') gender?: string,
+  ) {
+    return this.deliveryService.quote(city, area, gender);
+  }
+
+  @Get('zones')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  listZones() {
+    return this.deliveryService.listZones();
+  }
+
+  @Post('zones')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  upsertZone(@Body() dto: UpsertDeliveryZoneDto) {
+    return this.deliveryService.upsertZone(dto);
+  }
+
+  @Patch('zones/:id')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  updateZone(@Param('id') id: string, @Body() dto: UpdateDeliveryZoneDto) {
+    return this.deliveryService.updateZone(id, dto);
+  }
+
+  @Post('zones/:id/deactivate')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  deactivateZone(@Param('id') id: string) {
+    return this.deliveryService.deactivateZone(id);
+  }
+
+  @Delete('zones/:id')
+  @RequirePermissions(PERMISSIONS.DELIVERY_ASSIGN)
+  deleteZone(@Param('id') id: string) {
+    return this.deliveryService.deleteZone(id);
   }
 
   @Get('agents')

@@ -5,10 +5,17 @@ import {
   ROLE_CODES,
   PERMISSIONS,
 } from '../src/common/permissions';
+import { TRIPOLI_AREAS } from '../src/common/delivery/delivery-zones';
 
 const prisma = new PrismaClient();
+const production = process.env.NODE_ENV === 'production';
 
 async function main() {
+  if (production && process.env.ALLOW_SEED !== 'true') {
+    throw new Error(
+      'الـ seed مرفوض في الإنتاج. لتشغيله مرة واحدة فقط: ALLOW_SEED=true',
+    );
+  }
   console.log('Seeding دار الأنوثة...');
 
   for (const p of PERMISSION_META) {
@@ -175,11 +182,13 @@ async function main() {
       locale: 'ar',
       roles: { create: [{ roleId: superRole.id }] },
     },
-    update: {
-      passwordHash,
-      phone: '0911820999',
-      status: 'ACTIVE',
-    },
+    update: production
+      ? { status: 'ACTIVE', phone: '0911820999' }
+      : {
+          passwordHash,
+          phone: '0911820999',
+          status: 'ACTIVE',
+        },
   });
 
   const deliveryRole = await prisma.role.findUniqueOrThrow({
@@ -196,10 +205,12 @@ async function main() {
       locale: 'ar',
       roles: { create: [{ roleId: deliveryRole.id }] },
     },
-    update: {
-      passwordHash: agentHash,
-      status: 'ACTIVE',
-    },
+    update: production
+      ? { status: 'ACTIVE' }
+      : {
+          passwordHash: agentHash,
+          status: 'ACTIVE',
+        },
   });
 
   await prisma.courier.upsert({
@@ -261,11 +272,13 @@ async function main() {
       locale: 'ar',
       roles: { create: [{ roleId: branchCashierRole.id }] },
     },
-    update: {
-      passwordHash: branchHash,
-      status: 'ACTIVE',
-      name: 'الفرع الرئيسي',
-    },
+    update: production
+      ? { status: 'ACTIVE', name: 'الفرع الرئيسي' }
+      : {
+          passwordHash: branchHash,
+          status: 'ACTIVE',
+          name: 'الفرع الرئيسي',
+        },
   });
   const existingMainBranch = await prisma.branch.findUnique({
     where: { username: 'main' },
@@ -314,6 +327,7 @@ async function main() {
     { key: 'company.phone_secondary', value: '0924443839', group: 'company' },
     { key: 'company.address', value: 'طرابلس - ليبيا', group: 'company' },
     { key: 'store.delivery_fee_tripoli', value: '15', group: 'store' },
+    { key: 'store.delivery_fee_tripoli_female', value: '20', group: 'store' },
     { key: 'store.delivery_fee_external', value: '35', group: 'store' },
     { key: 'mobile.android_package', value: 'ly.daronotha.store', group: 'mobile' },
     { key: 'mobile.ios_bundle_id', value: 'ly.daronotha.store', group: 'mobile' },
@@ -338,6 +352,23 @@ async function main() {
       where: { key: s.key },
       create: s,
       update: { value: s.value },
+    });
+  }
+
+  const maleDefault = 15;
+  const femaleDefault = 20;
+  for (const [i, area] of TRIPOLI_AREAS.entries()) {
+    await prisma.deliveryZone.upsert({
+      where: { city_area: { city: 'طرابلس', area: area.nameAr } },
+      create: {
+        city: 'طرابلس',
+        area: area.nameAr,
+        maleFee: maleDefault,
+        femaleFee: femaleDefault,
+        sortOrder: i,
+        isActive: true,
+      },
+      update: {},
     });
   }
 
@@ -370,8 +401,14 @@ async function main() {
 
   await prisma.setting.upsert({
     where: { key: 'store.url' },
-    create: { key: 'store.url', value: 'http://localhost:5173/store', group: 'store' },
-    update: {},
+    create: {
+      key: 'store.url',
+      value: process.env.STORE_URL || 'http://localhost:5174',
+      group: 'store',
+    },
+    update: production
+      ? {}
+      : { value: process.env.STORE_URL || 'http://localhost:5174' },
   });
 
   const existingRule = await prisma.commissionRule.findFirst({

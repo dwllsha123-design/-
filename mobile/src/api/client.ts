@@ -46,6 +46,8 @@ export type MobileBootstrap = {
   currency: string;
   currencySymbol: string;
   deliveryFeeTripoli: number;
+  deliveryFeeTripoliMale: number;
+  deliveryFeeTripoliFemale: number;
   deliveryFeeExternal: number;
   storeUrl: string;
   maintenance: { enabled: boolean; messageAr: string };
@@ -204,9 +206,10 @@ export function createApiClient(config: ApiClientConfig) {
     products: (query = '') => request(`/store/products${query}`),
     product: (id: string) => request(`/store/products/${id}`),
     categories: () => request('/store/categories'),
-    deliveryQuote: (city: string, area?: string) => {
+    deliveryQuote: (city: string, area?: string, gender?: 'MALE' | 'FEMALE') => {
       const q = new URLSearchParams({ city });
       if (area) q.set('area', area);
+      if (gender) q.set('gender', gender);
       return request(`/store/delivery-quote?${q.toString()}`);
     },
     checkout: (body: unknown) =>

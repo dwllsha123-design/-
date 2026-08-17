@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+.cursor
+**/node_modules
+backend/dist
+backend/uploads
+backend/prisma/*.db
+**/.env
+mobile
+Docs
+*.md

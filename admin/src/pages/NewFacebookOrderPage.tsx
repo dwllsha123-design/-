@@ -30,9 +30,17 @@ export function NewFacebookOrderPage() {
   const [facebookPageId, setFacebookPageId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [cities, setCities] = useState<Array<{ nameAr: string; deliveryType: string; areas: string[] }>>([]);
+  const [cities, setCities] = useState<
+    Array<{
+      nameAr: string;
+      deliveryType: string;
+      areas: string[];
+      requiresGender?: boolean;
+    }>
+  >([]);
   const [city, setCity] = useState('طرابلس');
   const [area, setArea] = useState('');
+  const [deliveryGender, setDeliveryGender] = useState<'MALE' | 'FEMALE'>('FEMALE');
   const [address, setAddress] = useState('');
   const [landmark, setLandmark] = useState('');
   const [deliveryFee, setDeliveryFee] = useState(0);
@@ -69,10 +77,12 @@ export function NewFacebookOrderPage() {
     () => cities.find((c) => c.nameAr === city)?.areas || [],
     [cities, city],
   );
+  const requiresGender = Boolean(cities.find((c) => c.nameAr === city)?.requiresGender);
 
   useEffect(() => {
     if (!city || !area) return;
     const qs = new URLSearchParams({ city, area });
+    if (requiresGender) qs.set('gender', deliveryGender);
     api<{ deliveryFee: number; deliveryType: string; labelAr: string }>(
       `/delivery/quote?${qs}`,
     )
@@ -82,7 +92,7 @@ export function NewFacebookOrderPage() {
         setDeliveryLabel(q.labelAr);
       })
       .catch(() => undefined);
-  }, [city, area]);
+  }, [city, area, deliveryGender, requiresGender]);
 
   const variants = useMemo(
     () =>
@@ -135,6 +145,7 @@ export function NewFacebookOrderPage() {
           shippingPhone: customerPhone,
           city,
           area,
+          deliveryGender: requiresGender ? deliveryGender : undefined,
           address,
           landmark,
           deliveryFee,
@@ -224,6 +235,18 @@ export function NewFacebookOrderPage() {
               ))}
             </select>
           </label>
+          {requiresGender ? (
+            <label>
+              نوع المندوب
+              <select
+                value={deliveryGender}
+                onChange={(e) => setDeliveryGender(e.target.value as 'MALE' | 'FEMALE')}
+              >
+                <option value="FEMALE">نسائي</option>
+                <option value="MALE">رجالي</option>
+              </select>
+            </label>
+          ) : null}
           <label>
             العنوان
             <input value={address} onChange={(e) => setAddress(e.target.value)} />

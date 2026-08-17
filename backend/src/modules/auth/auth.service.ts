@@ -96,18 +96,23 @@ export class AuthService {
   private async tryBranchLogin(identifier: string, password: string) {
     if (!identifier) return null;
     const lowered = identifier.toLowerCase();
-    const branch = await this.prisma.branch.findFirst({
-      where: {
-        isActive: true,
-        OR: [{ username: identifier }, { username: lowered }],
-      },
-    });
-    if (!branch) return null;
-    const valid = await bcrypt.compare(password, branch.passwordHash);
-    if (!valid) {
-      throw new UnauthorizedException('بيانات الدخول غير صحيحة');
+    try {
+      const branch = await this.prisma.branch.findFirst({
+        where: {
+          isActive: true,
+          OR: [{ username: identifier }, { username: lowered }],
+        },
+      });
+      if (!branch) return null;
+      const valid = await bcrypt.compare(password, branch.passwordHash);
+      if (!valid) {
+        throw new UnauthorizedException('بيانات الدخول غير صحيحة');
+      }
+      return branch.userId;
+    } catch (err) {
+      if (err instanceof UnauthorizedException) throw err;
+      return null;
     }
-    return branch.userId;
   }
 
   private phoneVariants(raw: string) {
@@ -272,7 +277,6 @@ export class AuthService {
           },
         },
         facebookPages: { include: { page: true } },
-        branch: true,
       },
     });
 
@@ -300,12 +304,20 @@ export class AuthService {
         pageId: fp.page.pageId,
         status: fp.page.status,
       })),
-      courier: await this.prisma.courier.findUnique({
-        where: { userId: user.id },
-        select: { id: true, name: true, phone: true, city: true, isActive: true },
-      }),
-      branch: toBranchSession(user.branch),
+      courier: await this.safeCourier(user.id),
+      branch: await this.branchForUser(user.id),
     };
+  }
+
+  private async safeCourier(userId: string) {
+    try {
+      return await this.prisma.courier.findUnique({
+        where: { userId },
+        select: { id: true, name: true, phone: true, city: true, isActive: true },
+      });
+    } catch {
+      return null;
+    }
   }
 
   async optionalUserId(authorization?: string): Promise<string | undefined> {
@@ -320,11 +332,19 @@ export class AuthService {
     }
   }
 
+  private async branchForUser(userId: string) {
+    try {
+      const branch = await this.prisma.branch.findUnique({ where: { userId } });
+      return toBranchSession(branch);
+    } catch {
+      return null;
+    }
+  }
+
   private async loadProfile(userId: string): Promise<UserWithRoles | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
-        branch: true,
         roles: {
           include: {
             role: {
@@ -351,7 +371,7 @@ export class AuthService {
           ),
         ),
       ],
-      branch: toBranchSession(user.branch),
+      branch: await this.branchForUser(user.id),
     };
   }
 

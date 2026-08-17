@@ -3,13 +3,23 @@ import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 import { AppModule } from './app.module';
+import { assertProductionEnv, isProduction } from './common/production-env';
 
 async function bootstrap() {
+  assertProductionEnv();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+  app.set('trust proxy', 1);
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+      contentSecurityPolicy: false,
+    }),
+  );
 
   const uploadsDir = join(process.cwd(), 'uploads');
   mkdirSync(join(uploadsDir, 'products'), { recursive: true });
@@ -45,7 +55,9 @@ async function bootstrap() {
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
-  const origins = [...new Set([...defaultOrigins, ...envOrigins])];
+  const origins = isProduction()
+    ? envOrigins
+    : [...new Set([...defaultOrigins, ...envOrigins])];
 
   app.enableCors({
     origin: origins,
@@ -62,26 +74,28 @@ async function bootstrap() {
     exposedHeaders: ['X-Api-Version'],
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('دار الأنوثة API')
-    .setDescription(
-      'Central Omnichannel Commerce API — Web, Admin, Android, and iOS',
-    )
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+  if (!isProduction()) {
+    const swagger = new DocumentBuilder()
+      .setTitle('دار الأنوثة API')
+      .setDescription(
+        'Central Omnichannel Commerce API — Web, Admin, Android, and iOS',
+      )
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = config.get<number>('PORT', 3000);
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   // eslint-disable-next-line no-console
-  console.log(`API running on http://localhost:${port}/api/v1`);
-  // eslint-disable-next-line no-console
-  console.log(`Referral: http://localhost:${port}/r/{pageCode}/{agentCode}`);
-  // eslint-disable-next-line no-console
-  console.log(`Swagger docs: http://localhost:${port}/docs`);
+  console.log(`API running on ${config.get('APP_URL') || `http://localhost:${port}`}/api/v1`);
+  if (!isProduction()) {
+    // eslint-disable-next-line no-console
+    console.log(`Swagger docs: http://localhost:${port}/docs`);
+  }
 }
 
 bootstrap();

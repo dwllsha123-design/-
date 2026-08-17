@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, money, type StoreProduct } from '../api/client';
 import { useCart, useFavorites } from '../cart/CartContext';
 import { ProductGrid } from '../components/ProductCard';
+import { storeColorHex } from '../lib/colors';
 
 const FALLBACK_IMG = 'https://picsum.photos/seed/p/800/1000';
 const MAX_QTY = 10;
@@ -38,8 +39,27 @@ export function ProductPage() {
     [product, variantId],
   );
 
-  const images = product?.images?.length
-    ? product.images
+  const galleryImages = useMemo(() => {
+    if (!product) return [{ url: FALLBACK_IMG, alt: '', isPrimary: true as const }];
+    const all = product.images || [];
+    const color = variant?.color || null;
+    const colorImgs = color ? all.filter((i) => i.color === color) : [];
+    if (colorImgs.length) return colorImgs;
+    if (variant?.imageUrl) {
+      return [{ url: variant.imageUrl, alt: color, isPrimary: true, color }];
+    }
+    const generic = all.filter((i) => !i.color);
+    if (generic.length) return generic;
+    if (all.length) return all;
+    return [{ url: FALLBACK_IMG, alt: product.nameAr, isPrimary: true }];
+  }, [product, variant]);
+
+  useEffect(() => {
+    setImageIdx(0);
+  }, [variant?.id, variant?.color]);
+
+  const images = galleryImages.length
+    ? galleryImages
     : [{ url: FALLBACK_IMG, alt: product?.nameAr, isPrimary: true }];
 
   const colors = [...new Set((product?.variants || []).map((v) => v.color).filter(Boolean))];
@@ -153,6 +173,9 @@ export function ProductPage() {
                         }
                       }}
                     >
+                      {storeColorHex(String(c)) ? (
+                        <span className="chip-dot" style={{ background: storeColorHex(String(c)) }} />
+                      ) : null}
                       {c}
                       {!ok ? <span className="chip-out">غير متوفر</span> : null}
                     </button>

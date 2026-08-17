@@ -17,8 +17,10 @@ import {
 } from './dto/store.dto';
 import {
   DELIVERY_CITIES,
-  findAreaFee,
+  TRIPOLI_AREAS,
+  deliveryGenderLabelAr,
   findDeliveryCity,
+  parseDeliveryGender,
 } from '../../common/delivery/delivery-zones';
 import { OrderFulfillmentService } from '../delivery/order-fulfillment.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -36,13 +38,14 @@ type PublicProduct = {
   compareAtPrice: number | null;
   discountPercent: number;
   currency: string;
-  images: Array<{ url: string; alt?: string | null; isPrimary: boolean }>;
+  images: Array<{ url: string; alt?: string | null; isPrimary: boolean; color?: string | null }>;
   variants: Array<{
     id: string;
     sku: string;
     color?: string | null;
     size?: string | null;
     nameAr?: string | null;
+    imageUrl?: string | null;
     retailPrice: number;
     inStock: boolean;
   }>;
@@ -73,6 +76,7 @@ export class StoreService {
       'company.phone_secondary',
       'company.address',
       'store.delivery_fee_tripoli',
+      'store.delivery_fee_tripoli_female',
       'store.delivery_fee_external',
     ];
     const rows = await this.prisma.setting.findMany({
@@ -92,19 +96,48 @@ export class StoreService {
       currency: map['app.currency'] || 'LYD',
       currencySymbol: map['app.currency_symbol'] || 'د.ل',
       deliveryFeeTripoli: Number(map['store.delivery_fee_tripoli'] || 15),
+      deliveryFeeTripoliMale: Number(map['store.delivery_fee_tripoli'] || 15),
+      deliveryFeeTripoliFemale: Number(
+        map['store.delivery_fee_tripoli_female'] || 20,
+      ),
       deliveryFeeExternal: Number(map['store.delivery_fee_external'] || 35),
     };
   }
 
   /** قائمة المدن والمناطق للواجهة — السعر يُحسب عبر quote */
-  deliveryOptions() {
+  async deliveryOptions() {
+    const company = await this.company();
+    const dbZones = await this.prisma.deliveryZone.findMany({
+      where: { city: 'طرابلس', isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { area: 'asc' }],
+    });
+    const tripoliNames = dbZones.length
+      ? dbZones.map((z) => z.area)
+      : TRIPOLI_AREAS.map((a) => a.nameAr);
+    const tripoliDetails = dbZones.length
+      ? dbZones.map((z) => ({
+          nameAr: z.area,
+          maleFee: Number(z.maleFee),
+          femaleFee: Number(z.femaleFee),
+        }))
+      : TRIPOLI_AREAS.map((a) => ({
+          nameAr: a.nameAr,
+          maleFee: company.deliveryFeeTripoliMale,
+          femaleFee: company.deliveryFeeTripoliFemale,
+        }));
+
     return {
-      cities: DELIVERY_CITIES.map((c) => ({
-        nameAr: c.nameAr,
-        mode: c.mode,
-        deliveryType: c.mode === 'OWN_AGENTS' ? 'INTERNAL' : 'EXTERNAL',
-        areas: c.areas.map((a) => a.nameAr),
-      })),
+      cities: DELIVERY_CITIES.map((c) => {
+        const isInternal = c.mode === 'OWN_AGENTS';
+        return {
+          nameAr: c.nameAr,
+          mode: c.mode,
+          deliveryType: isInternal ? 'INTERNAL' : 'EXTERNAL',
+          requiresGender: isInternal,
+          areas: isInternal ? tripoliNames : c.areas.map((a) => a.nameAr),
+          areaDetails: isInternal ? tripoliDetails : undefined,
+        };
+      }),
       notes: {
         internal: 'سيتم التواصل معكِ لتأكيد موعد التوصيل.',
         external: 'سيتم التواصل معكِ لتأكيد موعد التوصيل.',
@@ -112,26 +145,59 @@ export class StoreService {
     };
   }
 
-  async resolveDelivery(city?: string, area?: string) {
+  async resolveDelivery(city?: string, area?: string, gender?: string) {
     const company = await this.company();
     const zone = findDeliveryCity(city);
-    const areaFee = findAreaFee(zone, area);
-    const baseFee =
-      zone.defaultFeeKey === 'tripoli'
-        ? company.deliveryFeeTripoli
-        : company.deliveryFeeExternal;
-    const deliveryFee = areaFee ?? baseFee;
+    const areaName = (area || '').trim();
     const isInternal = zone.mode === 'OWN_AGENTS';
+
+    if (!isInternal) {
+      return {
+        city: zone.nameAr,
+        area: areaName || null,
+        deliveryType: 'EXTERNAL' as const,
+        deliveryFee: company.deliveryFeeExternal,
+        mode: zone.mode,
+        gender: null,
+        requiresGender: false,
+        maleFee: null,
+        femaleFee: null,
+        labelAr: areaName
+          ? `رسوم التوصيل (${areaName})`
+          : 'رسوم التوصيل خارج طرابلس',
+        areas: zone.areas.map((a) => a.nameAr),
+        feeSource: 'city',
+      };
+    }
+
+    const parsed = parseDeliveryGender(gender) || 'FEMALE';
+    const row = areaName
+      ? await this.prisma.deliveryZone.findFirst({
+          where: { city: 'طرابلس', area: areaName, isActive: true },
+        })
+      : null;
+    const maleFee = row ? Number(row.maleFee) : company.deliveryFeeTripoliMale;
+    const femaleFee = row
+      ? Number(row.femaleFee)
+      : company.deliveryFeeTripoliFemale;
+    const deliveryFee = parsed === 'FEMALE' ? femaleFee : maleFee;
+    const genderLabel = deliveryGenderLabelAr(parsed);
 
     return {
       city: zone.nameAr,
-      area: (area || '').trim() || null,
-      deliveryType: isInternal ? 'INTERNAL' : 'EXTERNAL',
+      area: areaName || null,
+      deliveryType: 'INTERNAL' as const,
       deliveryFee,
       mode: zone.mode,
-      labelAr: area ? `رسوم التوصيل (${area})` : 'رسوم التوصيل',
+      gender: parsed,
+      requiresGender: true,
+      maleFee,
+      femaleFee,
+      labelAr: areaName
+        ? `رسوم التوصيل ${genderLabel} (${areaName})`
+        : `رسوم التوصيل ${genderLabel}`,
       areas: zone.areas.map((a) => a.nameAr),
-      feeSource: areaFee != null ? 'area' : 'city',
+      feeSource: row ? 'zone' : 'city',
     };
   }
 
@@ -166,6 +232,7 @@ export class StoreService {
         alt: string | null;
         isPrimary: boolean;
         sortOrder: number;
+        color?: string | null;
       }>;
       variants: Array<{
         id: string;
@@ -173,6 +240,7 @@ export class StoreService {
         color: string | null;
         size: string | null;
         nameAr: string | null;
+        imageUrl?: string | null;
         retailPrice: Prisma.Decimal | number;
         price: Prisma.Decimal | number;
         isActive: boolean;
@@ -191,6 +259,7 @@ export class StoreService {
         color: v.color,
         size: v.size,
         nameAr: v.nameAr,
+        imageUrl: v.imageUrl || null,
         retailPrice: Number(v.retailPrice || v.price),
         inStock,
       });
@@ -221,6 +290,7 @@ export class StoreService {
           url: i.url,
           alt: i.alt,
           isPrimary: i.isPrimary,
+          color: i.color || null,
         })),
       variants,
       inStock: anyInStock,
@@ -551,7 +621,11 @@ export class StoreService {
       throw new BadRequestException('السلة فارغة');
     }
 
-    const delivery = await this.resolveDelivery(dto.city, dto.area);
+    const delivery = await this.resolveDelivery(
+      dto.city,
+      dto.area,
+      dto.deliveryGender,
+    );
 
     let pagePublicCode: number | undefined;
     let agentPublicCode: number | undefined;
@@ -755,9 +829,14 @@ export class StoreService {
           shippingPhone: dto.phone,
           city: dto.city,
           area: dto.area,
+          deliveryGender: delivery.gender || undefined,
           address: dto.address,
           landmark: dto.landmark,
-          notes: dto.notes,
+          notes: [dto.notes?.trim(), delivery.gender
+            ? `توصيل ${deliveryGenderLabelAr(delivery.gender)}`
+            : '']
+            .filter(Boolean)
+            .join(' | ') || undefined,
           items: {
             create: items.map(({ trackStock: _t, ...rest }) => rest),
           },

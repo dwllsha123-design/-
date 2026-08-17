@@ -6,9 +6,9 @@ node_modules/
 .env
 .env.local
 .env.*.local
-backend/.env
-**/credentials.json
-**/*secret*
+deploy/.env
+data/
+
 
 # Build / caches
 dist/
@@ -23,6 +23,8 @@ Thumbs.db
 # Databases & local data
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 backend/prisma/dev.db

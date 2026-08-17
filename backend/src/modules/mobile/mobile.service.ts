@@ -28,6 +28,7 @@ export class MobileService {
       'company.phone_secondary',
       'company.address',
       'store.delivery_fee_tripoli',
+      'store.delivery_fee_tripoli_female',
       'store.delivery_fee_external',
       'store.url',
       'mobile.android_package',
@@ -113,6 +114,10 @@ export class MobileService {
       currency: map['app.currency'] || 'LYD',
       currencySymbol: map['app.currency_symbol'] || 'د.ل',
       deliveryFeeTripoli: Number(map['store.delivery_fee_tripoli'] || 15),
+      deliveryFeeTripoliMale: Number(map['store.delivery_fee_tripoli'] || 15),
+      deliveryFeeTripoliFemale: Number(
+        map['store.delivery_fee_tripoli_female'] || 20,
+      ),
       deliveryFeeExternal: Number(map['store.delivery_fee_external'] || 35),
       storeUrl,
       maintenance: {

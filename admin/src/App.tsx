@@ -21,11 +21,11 @@ import { PosInvoicePage } from './pages/PosInvoicePage';
 import { ReturnsPage } from './pages/ReturnsPage';
 import { ReservationsPage } from './pages/ReservationsPage';
 import { CommissionsPage } from './pages/CommissionsPage';
-import { PromosPage } from './pages/PromosPage';
 import { BannersPage } from './pages/BannersPage';
 import { UsersPage } from './pages/UsersPage';
 import { AuditPage } from './pages/AuditPage';
 import { RegisterMarketerPage } from './pages/RegisterMarketerPage';
+import { DeliveryZonesPage } from './pages/DeliveryZonesPage';
 
 function Protected({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -120,7 +120,7 @@ export default function App() {
           <Route path="delivery" element={<DeliveryPage />} />
           <Route path="delivery/company" element={<CompanyOrdersPage />} />
           <Route path="tripoli-drivers" element={<TripoliDriversPage />} />
-          <Route path="promos" element={<PromosPage />} />
+          <Route path="delivery/zones" element={<DeliveryZonesPage />} />
           <Route path="banners" element={<BannersPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="audit" element={<AuditPage />} />
