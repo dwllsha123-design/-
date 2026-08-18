@@ -1,3 +1,5 @@
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { join } from 'path';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import {
@@ -550,6 +552,37 @@ async function main() {
     create: { year, counter: 0 },
     update: {},
   });
+
+  const heroCount = await prisma.banner.count({ where: { placement: 'HERO' } });
+  if (heroCount === 0) {
+    const uploadsHero = join(process.cwd(), 'uploads', 'banners');
+    mkdirSync(uploadsHero, { recursive: true });
+    const homeDir = join(process.cwd(), '..', 'storefront', 'public', 'home');
+    const heroSlides = [
+      { file: 'hero.jpg', title: 'الرئيسية' },
+      { file: 'coming-soon.jpg', title: 'وصل حديثاً' },
+      { file: 'category.jpg', title: 'التصنيفات' },
+    ];
+    for (let i = 0; i < heroSlides.length; i += 1) {
+      const slide = heroSlides[i];
+      const src = join(homeDir, slide.file);
+      const destName = `hero-slide-${i + 1}.jpg`;
+      let imageUrl = `/home/${slide.file}`;
+      if (existsSync(src)) {
+        copyFileSync(src, join(uploadsHero, destName));
+        imageUrl = `/uploads/banners/${destName}`;
+      }
+      await prisma.banner.create({
+        data: {
+          title: slide.title,
+          imageUrl,
+          placement: 'HERO',
+          sortOrder: i,
+          active: true,
+        },
+      });
+    }
+  }
 
   console.log('Seed complete.');
   console.log('Super Admin:', admin.email);

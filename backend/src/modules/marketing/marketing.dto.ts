@@ -1,9 +1,12 @@
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 import { PromoDiscountType } from '@prisma/client';
@@ -86,8 +89,9 @@ export class UpdatePromoDto {
 }
 
 export class UpsertBannerDto {
+  @IsOptional()
   @IsString()
-  title!: string;
+  title?: string;
 
   @IsOptional()
   @IsString()
@@ -100,6 +104,32 @@ export class UpsertBannerDto {
   @IsOptional()
   @IsString()
   linkUrl?: string;
+
+  @IsOptional()
+  @IsIn(['HERO', 'PROMO'])
+  placement?: 'HERO' | 'PROMO';
+
+  @IsOptional()
+  @IsIn(['cover', 'contain'])
+  imageFit?: 'cover' | 'contain';
+
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(250)
+  imageZoom?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  imagePosX?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  imagePosY?: number;
 
   @IsOptional()
   @IsNumber()
@@ -134,6 +164,32 @@ export class UpdateBannerDto {
   @IsOptional()
   @IsString()
   linkUrl?: string;
+
+  @IsOptional()
+  @IsIn(['HERO', 'PROMO'])
+  placement?: 'HERO' | 'PROMO';
+
+  @IsOptional()
+  @IsIn(['cover', 'contain'])
+  imageFit?: 'cover' | 'contain';
+
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(250)
+  imageZoom?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  imagePosX?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  imagePosY?: number;
 
   @IsOptional()
   @IsNumber()

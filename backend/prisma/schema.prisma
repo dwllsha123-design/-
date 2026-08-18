@@ -932,6 +932,13 @@ model Banner {
   subtitle   String?
   imageUrl   String?
   linkUrl    String?
+  /// HERO = سلايدر الرئيسية، PROMO = لافتات أسفل السلايدر
+  placement  String    @default("PROMO")
+  /// cover = ملء الإطار، contain = إظهار الصورة كاملة
+  imageFit   String    @default("cover")
+  imageZoom  Int       @default(100)
+  imagePosX  Int       @default(50)
+  imagePosY  Int       @default(50)
   sortOrder  Int       @default(0)
   active     Boolean   @default(true)
   startsAt   DateTime?
@@ -940,6 +947,7 @@ model Banner {
   updatedAt  DateTime  @updatedAt
 
   @@index([active, sortOrder])
+  @@index([placement, active, sortOrder])
   @@map("banners")
 }
 

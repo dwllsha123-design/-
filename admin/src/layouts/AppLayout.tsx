@@ -24,7 +24,7 @@ const links: NavItem[] = [
   { to: '/delivery/company', label: 'طلبات شركة التوصيل', icon: 'local_shipping', perm: 'orders.view', hint: 'متابعة حالات Accuratess لحظياً' },
   { to: '/commissions', label: 'العمولات', icon: 'payments', perm: 'commissions.view', hint: 'عمولة المسوّقين والمندوبين' },
   { to: '/facebook-pages', label: 'الصفحات', icon: 'web', perm: 'facebook_pages.view', hint: 'صفحات فيسبوك وروابط المتجر الخاصة بها' },
-  { to: '/banners', label: 'لافتات', icon: 'view_carousel', perm: 'marketing.manage', hint: 'صور العروض في واجهة المتجر' },
+  { to: '/banners', label: 'صور المتجر', icon: 'view_carousel', perm: 'marketing.manage', hint: 'سلايدر الرئيسية ولافتات العروض' },
   { to: '/users', label: 'المستخدمون', icon: 'manage_accounts', perm: 'users.manage', hint: 'الموظفون وصلاحيات كل وظيفة' },
   { to: '/audit', label: 'سجل النشاط', icon: 'history', perm: 'audit.view', hint: 'من عدّل ماذا ومتى' },
 ];

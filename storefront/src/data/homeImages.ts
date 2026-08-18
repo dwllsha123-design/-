@@ -12,10 +12,10 @@ export const HOME_IMAGES = {
 };
 
 export const HERO_SLIDES = [
+  '/home/hero-robes.jpg',
+  '/home/hero-lingerie.jpg',
+  '/home/hero-robes-still.jpg',
   '/home/hero.jpg',
   '/home/coming-soon.jpg',
   '/home/category.jpg',
-  '/home/product-faraa.jpg',
-  '/home/product-kaftan.jpg',
-  '/home/product-kaftan-34.jpg',
 ] as const;

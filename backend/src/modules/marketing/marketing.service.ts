@@ -102,12 +102,18 @@ export class MarketingService {
   }
 
   async createBanner(user: AuthUser, dto: UpsertBannerDto) {
+    const placement = dto.placement === 'HERO' ? 'HERO' : 'PROMO';
     const created = await this.prisma.banner.create({
       data: {
-        title: dto.title,
+        title: (dto.title || '').trim() || (placement === 'HERO' ? 'شريحة الرئيسية' : 'لافتة'),
         subtitle: dto.subtitle,
         imageUrl: dto.imageUrl,
         linkUrl: dto.linkUrl,
+        placement,
+        imageFit: dto.imageFit === 'contain' ? 'contain' : 'cover',
+        imageZoom: dto.imageZoom ?? 100,
+        imagePosX: dto.imagePosX ?? 50,
+        imagePosY: dto.imagePosY ?? 50,
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
@@ -133,6 +139,11 @@ export class MarketingService {
         subtitle: dto.subtitle,
         imageUrl: dto.imageUrl,
         linkUrl: dto.linkUrl,
+        placement: dto.placement,
+        imageFit: dto.imageFit,
+        imageZoom: dto.imageZoom,
+        imagePosX: dto.imagePosX,
+        imagePosY: dto.imagePosY,
         sortOrder: dto.sortOrder,
         active: dto.active,
         startsAt:

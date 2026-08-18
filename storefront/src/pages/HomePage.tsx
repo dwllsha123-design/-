@@ -13,6 +13,11 @@ type Banner = {
   subtitle?: string | null;
   imageUrl?: string | null;
   linkUrl?: string | null;
+  placement?: 'HERO' | 'PROMO' | string;
+  imageFit?: 'cover' | 'contain' | string;
+  imageZoom?: number;
+  imagePosX?: number;
+  imagePosY?: number;
 };
 
 export function HomePage() {
@@ -22,6 +27,29 @@ export function HomePage() {
   const [banners, setBanners] = useState<Banner[]>([]);
   const [heroIndex, setHeroIndex] = useState(0);
   const categories = useStoreCategories();
+
+  const heroBanners = banners.filter((b) => b.placement === 'HERO' && b.imageUrl);
+  const promoBanners = banners.filter((b) => b.placement !== 'HERO');
+  const heroSlides =
+    heroBanners.length > 0
+      ? heroBanners.map((b) => ({
+          id: b.id,
+          src: b.imageUrl as string,
+          alt: b.title,
+          fit: b.imageFit === 'contain' ? 'contain' : 'cover',
+          zoom: b.imageZoom ?? 100,
+          x: b.imagePosX ?? 50,
+          y: b.imagePosY ?? 50,
+        }))
+      : HERO_SLIDES.map((src) => ({
+          id: src,
+          src,
+          alt: '',
+          fit: 'cover' as const,
+          zoom: 100,
+          x: 50,
+          y: 50,
+        }));
 
   useEffect(() => {
     api<StoreProduct[]>('/store/products?collection=new').then(setNewItems).catch(() => undefined);
@@ -33,11 +61,16 @@ export function HomePage() {
   }, []);
 
   useEffect(() => {
+    setHeroIndex(0);
+  }, [heroSlides.length]);
+
+  useEffect(() => {
+    if (heroSlides.length < 2) return;
     const timer = window.setInterval(() => {
-      setHeroIndex((i) => (i + 1) % HERO_SLIDES.length);
+      setHeroIndex((i) => (i + 1) % heroSlides.length);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [heroSlides.length]);
 
   const featured = categories.slice(0, 4);
 
@@ -45,20 +78,26 @@ export function HomePage() {
     <>
       <section className="hero-lux">
         <div className="hero-lux-media">
-          {HERO_SLIDES.map((src, i) => (
+          {heroSlides.map((slide, i) => (
             <img
-              key={src}
+              key={slide.id}
               className={`hero-lux-slide${i === heroIndex ? ' is-active' : ''}`}
-              src={src}
-              alt=""
+              src={slide.src}
+              alt={slide.alt}
               decoding="async"
               loading={i === 0 ? 'eager' : 'lazy'}
+              style={{
+                objectFit: slide.fit,
+                objectPosition: `${slide.x}% ${slide.y}%`,
+                transform: `scale(${slide.zoom / 100})`,
+                transformOrigin: `${slide.x}% ${slide.y}%`,
+              }}
             />
           ))}
           <div className="hero-dots" aria-hidden>
-            {HERO_SLIDES.map((src, i) => (
+            {heroSlides.map((slide, i) => (
               <button
-                key={src}
+                key={slide.id}
                 type="button"
                 className={i === heroIndex ? 'is-active' : ''}
                 onClick={() => setHeroIndex(i)}
@@ -106,10 +145,10 @@ export function HomePage() {
         </div>
       </section>
 
-      {banners.length ? (
+      {promoBanners.length ? (
         <section className="container section">
           <div className="banner-row">
-            {banners.map((b) => (
+            {promoBanners.map((b) => (
               <StoreLink key={b.id} className="banner-card" to={b.linkUrl || '/offers'}>
                 {b.imageUrl ? (
                   <img src={b.imageUrl} alt="" loading="lazy" decoding="async" />
