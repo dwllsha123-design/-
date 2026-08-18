@@ -129,7 +129,7 @@ export function StoreLayout() {
               </Link>
               <ThemeToggle />
               <Link className="icon-btn" to="/cart" aria-label="السلة">
-                <span className="material-symbols-outlined">shopping_bag</span>
+                <span className="material-symbols-outlined">shopping_cart</span>
                 {count > 0 ? <span className="cart-badge">{count > 9 ? '9+' : count}</span> : null}
               </Link>
             </div>
@@ -245,7 +245,7 @@ export function StoreLayout() {
           </Link>
           <Link to="/categories" className={bottomActive(location.pathname, 'categories') ? 'active' : ''}>
             <span className={`material-symbols-outlined${bottomActive(location.pathname, 'categories') ? ' filled' : ''}`}>
-              category
+              checkroom
             </span>
             <span>التصنيفات</span>
           </Link>

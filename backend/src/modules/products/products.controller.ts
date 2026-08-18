@@ -14,13 +14,14 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { join } from 'path';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { imageUploadOptions } from '../../common/image-upload';
+import { imageUploadOptions, type UploadedImageFile } from '../../common/image-upload';
 import { ProductsService } from './products.service';
 import {
   AddProductImageDto,
   CreateProductDto,
   CreateVariantDto,
   UpdateProductDto,
+  ApplyDiscountDto,
 } from './dto/product.dto';
 import { RequirePermissions } from '../../common/decorators/auth.decorators';
 import { PERMISSIONS } from '../../common/permissions';
@@ -63,6 +64,22 @@ export class ProductsController {
     return this.productsService.update(user, id, dto);
   }
 
+  @Delete(':id')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  remove(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.productsService.remove(user, id);
+  }
+
+  @Post(':id/discount')
+  @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
+  applyDiscount(
+    @CurrentUser() user: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: ApplyDiscountDto,
+  ) {
+    return this.productsService.applyDiscount(user, id, dto.percent);
+  }
+
   @Post(':id/variants')
   @RequirePermissions(PERMISSIONS.PRODUCTS_EDIT)
   addVariant(
@@ -92,9 +109,11 @@ export class ProductsController {
     @Param('id') id: string,
     @Query('color') color?: string,
     @UploadedFile()
-    file?: { filename: string; originalname: string; mimetype: string; buffer?: Buffer },
+    file?: UploadedImageFile,
   ) {
-    if (!file?.filename && !file?.buffer) throw new BadRequestException('اختاري صورة للرفع');
+    if (!file?.filename && !file?.buffer && !file?.path) {
+      throw new BadRequestException('اختاري صورة للرفع');
+    }
     return this.productsService.uploadImage(id, file, color);
   }
 

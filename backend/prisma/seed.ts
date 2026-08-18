@@ -503,7 +503,7 @@ async function main() {
         images: {
           create: [
             {
-              url: `https://picsum.photos/seed/${p.sku}/800/1000`,
+              url: `https://picsum.photos/seed/${p.sku}/1200/1500`,
               alt: p.nameAr,
               isPrimary: true,
               sortOrder: 0,

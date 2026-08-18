@@ -73,6 +73,12 @@ export class StoreController {
   }
 
   @Public()
+  @Get('stock')
+  stock(@Query('variants') variants?: string) {
+    return this.storeService.variantStock((variants || '').split(','));
+  }
+
+  @Public()
   @Get('products/:id')
   product(@Param('id') id: string) {
     return this.storeService.productById(id);

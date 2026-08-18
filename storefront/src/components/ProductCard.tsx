@@ -33,12 +33,17 @@ export function ProductCard({ product }: { product: StoreProduct }) {
       ? product.variants.find((v) => v.color === previewColor && v.inStock) ||
         product.variants.find((v) => v.color === previewColor)
       : null) || product.variants.find((v) => v.inStock);
+  const soldOut =
+    !product.inStock ||
+    (previewColor
+      ? !product.variants.some((v) => v.color === previewColor && v.inStock)
+      : !stockVariant?.inStock);
   const sizes = [...new Set(product.variants.map((v) => v.size).filter(Boolean))] as string[];
   const colors = [...new Set(product.variants.map((v) => v.color).filter(Boolean))] as string[];
 
   function quickAdd() {
     if (!stockVariant?.inStock) return;
-    add({
+    const ok = add({
       variantId: stockVariant.id,
       productId: product.id,
       nameAr: product.nameAr,
@@ -47,17 +52,20 @@ export function ProductCard({ product }: { product: StoreProduct }) {
       size: stockVariant.size,
       quantity: 1,
       unitPrice: stockVariant.retailPrice || product.retailPrice,
+      available: stockVariant.available,
+      inStock: true,
     });
+    if (!ok) return;
     setAdded(true);
     window.setTimeout(() => setAdded(false), 1600);
   }
 
   return (
-    <article className={`product-card${!product.inStock ? ' is-out' : ''}`}>
+    <article className={`product-card${soldOut ? ' is-out' : ''}`}>
       <div className="thumb">
         <Link to={`/product/${product.id}`} className="thumb-link" aria-label={product.nameAr}>
           {img ? (
-            <img src={img} alt={product.nameAr} loading="lazy" />
+            <img src={img} alt={product.nameAr} width={1200} height={1500} loading="lazy" />
           ) : (
             <div className="thumb-ph" aria-hidden>
               <span className="material-symbols-outlined">checkroom</span>
@@ -70,7 +78,7 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           ) : null}
           {isNew && product.discountPercent <= 0 ? <span className="badge-new">جديد</span> : null}
         </div>
-        {!product.inStock ? (
+        {soldOut ? (
           <div className="unavailable-mark" aria-label="غير متوفر">
             <span>غير متوفر</span>
           </div>
@@ -134,14 +142,14 @@ export function ProductCard({ product }: { product: StoreProduct }) {
           ) : null}
         </div>
 
-        {stockVariant?.inStock ? (
+        {!soldOut && stockVariant?.inStock ? (
           <button className="card-add" type="button" onClick={quickAdd}>
             {added ? 'تمت الإضافة' : 'إضافة إلى السلة'}
           </button>
         ) : (
-          <Link className="card-add ghost" to={`/product/${product.id}`}>
-            عرض التفاصيل
-          </Link>
+          <button className="card-add soldout" type="button" disabled>
+            غير متوفر
+          </button>
         )}
       </div>
     </article>

@@ -103,6 +103,7 @@ export const sourceLabel: Record<string, string> = {
 
 export const statusLabel: Record<string, string> = {
   DRAFT: 'مسودة',
+  ARCHIVED: 'مخفي',
   NEW: 'جديد',
   CONFIRMED: 'مؤكد',
   PREPARING: 'قيد التجهيز',
@@ -132,6 +133,7 @@ export function statusBadgeClass(status: string): string {
     case 'OUT_FOR_DELIVERY':
       return 'badge info';
     case 'DRAFT':
+    case 'ARCHIVED':
       return 'badge warning';
     case 'CANCELLED':
     case 'RETURNED':

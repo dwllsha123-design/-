@@ -20,6 +20,7 @@ export type StoreProduct = {
     nameAr?: string | null;
     imageUrl?: string | null;
     retailPrice: number;
+    available?: number;
     inStock: boolean;
   }>;
   inStock: boolean;

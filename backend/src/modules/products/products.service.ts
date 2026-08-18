@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
-import { extname, join } from 'path';
+import { join } from 'path';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateProductDto, CreateVariantDto, UpdateProductDto } from './dto/product.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { sanitizePrices, canViewWholesalePrices, canViewCostPrices } from '../../common/pricing/price-policy';
 import { CentralInventoryService } from '../inventory/services/central-inventory.service';
 import { CodeSequenceService } from '../inventory/services/code-sequence.service';
+import { saveUploadAsWebp, PRODUCT_IMAGE_SIZE, type UploadedImageFile } from '../../common/image-upload';
 
 @Injectable()
 export class ProductsService {
@@ -205,19 +205,27 @@ export class ProductsService {
   }
 
   async update(user: AuthUser, id: string, dto: UpdateProductDto) {
-    await this.findOne(user, id);
+    const current = await this.prisma.product.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('المنتج غير موجود');
     const retail = dto.retailPrice ?? dto.basePrice;
-    const pricing = this.pricingFields(user, dto);
-    const product = await this.prisma.product.update({
+    const priceChanged =
+      retail !== undefined && Number(retail) !== Number(current.retailPrice);
+
+    await this.prisma.product.update({
       where: { id },
       data: {
         nameAr: dto.nameAr,
         nameEn: dto.nameEn,
         description: dto.description,
-        categoryId: dto.categoryId,
+        categoryId:
+          dto.categoryId === undefined ? undefined : dto.categoryId || null,
         brand: dto.brand,
-        retailPrice: retail,
-        basePrice: retail,
+        ...(retail !== undefined
+          ? {
+              retailPrice: retail,
+              basePrice: priceChanged ? retail : undefined,
+            }
+          : {}),
         ...(canViewCostPrices(user) && dto.costPrice !== undefined
           ? { costPrice: dto.costPrice }
           : {}),
@@ -226,9 +234,129 @@ export class ProductsService {
           : {}),
         status: dto.status,
       },
-      include: { variants: true, images: true },
     });
-    return sanitizePrices(product, user);
+
+    if (priceChanged && retail !== undefined) {
+      const oldRetail = Number(current.retailPrice);
+      await this.prisma.productVariant.updateMany({
+        where: { productId: id, retailPrice: oldRetail },
+        data: { retailPrice: retail, price: retail },
+      });
+    }
+
+    return this.findOne(user, id);
+  }
+
+  async remove(_user: AuthUser, id: string) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { variants: { select: { id: true } } },
+    });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    const variantIds = product.variants.map((v) => v.id);
+
+    const [activeReservations, orderItems, transferItems] = await Promise.all([
+      variantIds.length
+        ? this.prisma.stockReservation.count({
+            where: { variantId: { in: variantIds }, status: 'ACTIVE' },
+          })
+        : 0,
+      variantIds.length
+        ? this.prisma.orderItem.count({ where: { variantId: { in: variantIds } } })
+        : 0,
+      variantIds.length
+        ? this.prisma.stockTransferItem.count({
+            where: { variantId: { in: variantIds } },
+          })
+        : 0,
+    ]);
+
+    if (activeReservations > 0) {
+      throw new BadRequestException(
+        'لا يمكن الحذف الآن: يوجد حجز مخزون نشط على هذا المنتج',
+      );
+    }
+
+    if (orderItems > 0 || transferItems > 0) {
+      await this.prisma.product.update({
+        where: { id },
+        data: { status: 'ARCHIVED' },
+      });
+      return { ok: true, archived: true };
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (variantIds.length) {
+        await tx.stockReservation.deleteMany({
+          where: { variantId: { in: variantIds } },
+        });
+        await tx.stockItem.deleteMany({ where: { variantId: { in: variantIds } } });
+      }
+      await tx.product.delete({ where: { id } });
+    });
+    return { ok: true, archived: false };
+  }
+
+  async applyDiscount(user: AuthUser, id: string, percent: number) {
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: { variants: true },
+    });
+    if (!product) throw new NotFoundException('المنتج غير موجود');
+    if (!Number.isFinite(percent) || percent < 0 || percent > 90) {
+      throw new BadRequestException('نسبة الخصم بين 0% و 90%');
+    }
+
+    const currentRetail = Number(product.retailPrice);
+    const currentBase = Number(product.basePrice);
+    const original = currentBase > currentRetail ? currentBase : currentRetail;
+    if (original <= 0) throw new BadRequestException('حددي سعر المنتج أولاً');
+
+    const roundLyd = (n: number) => Math.max(1, Math.round(n));
+    const variantOriginal = (v: { retailPrice: unknown; price: unknown }) => {
+      const vRetail = Number(v.retailPrice || v.price || 0);
+      if (currentRetail > 0 && currentBase > currentRetail) {
+        return roundLyd(vRetail * (original / currentRetail));
+      }
+      return vRetail;
+    };
+
+    if (percent === 0) {
+      await this.prisma.$transaction([
+        this.prisma.product.update({
+          where: { id },
+          data: { retailPrice: original, basePrice: original },
+        }),
+        ...product.variants.map((v) => {
+          const restored = variantOriginal(v);
+          return this.prisma.productVariant.update({
+            where: { id: v.id },
+            data: { retailPrice: restored, price: restored },
+          });
+        }),
+      ]);
+      return this.findOne(user, id);
+    }
+
+    const sale = roundLyd((original * (100 - percent)) / 100);
+    if (sale >= original) {
+      throw new BadRequestException('السعر بعد الخصم يجب أن يكون أقل من السعر الأصلي');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.product.update({
+        where: { id },
+        data: { basePrice: original, retailPrice: sale },
+      }),
+      ...product.variants.map((v) => {
+        const vSale = roundLyd((variantOriginal(v) * (100 - percent)) / 100);
+        return this.prisma.productVariant.update({
+          where: { id: v.id },
+          data: { retailPrice: vSale, price: vSale },
+        });
+      }),
+    ]);
+    return this.findOne(user, id);
   }
 
   async addVariant(user: AuthUser, productId: string, dto: CreateVariantDto) {
@@ -367,33 +495,13 @@ export class ProductsService {
     });
   }
 
-  async uploadImage(
-    productId: string,
-    file: {
-      filename?: string;
-      originalname: string;
-      mimetype: string;
-      buffer?: Buffer;
-    },
-    color?: string,
-  ) {
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (file.mimetype && !allowed.includes(file.mimetype)) {
-      throw new BadRequestException('صيغة الصورة غير مدعومة (JPG / PNG / WEBP)');
-    }
+  async uploadImage(productId: string, file: UploadedImageFile, color?: string) {
     const dir = join(process.cwd(), 'uploads', 'products');
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    let url = '';
-    if (file.filename) {
-      url = `/uploads/products/${file.filename}`;
-    } else {
-      if (!file.buffer) throw new BadRequestException('اختاري صورة للرفع');
-      const ext = extname(file.originalname || '').toLowerCase() || '.jpg';
-      const name = `${productId}-${Date.now()}${ext}`;
-      writeFileSync(join(dir, name), file.buffer);
-      url = `/uploads/products/${name}`;
-    }
-    return this.addImage(productId, url, false, color);
+    const saved = await saveUploadAsWebp(file, dir, '/uploads/products', {
+      ...PRODUCT_IMAGE_SIZE,
+      fit: 'cover',
+    });
+    return this.addImage(productId, saved.url, false, color);
   }
 
   async removeImage(productId: string, imageId: string) {

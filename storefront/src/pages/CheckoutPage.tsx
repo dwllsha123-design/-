@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, getAttributionMeta, money } from '../api/client';
-import { useCart } from '../cart/CartContext';
+import { useCart, useCartStock } from '../cart/CartContext';
 import { useAuth } from '../auth/AuthContext';
 
 type DeliveryCity = {
@@ -36,6 +36,7 @@ type Profile = {
 
 export function CheckoutPage() {
   const { items, subtotal, clear } = useCart();
+  const { unavailable, canCheckout, loaded } = useCartStock();
   const { user } = useAuth();
   const navigate = useNavigate();
   const attr = getAttributionMeta();
@@ -142,6 +143,14 @@ export function CheckoutPage() {
     }
     if (requiresGender && !deliveryGender) {
       setError('اختاري نوع المندوب لحساب سعر التوصيل');
+      return;
+    }
+    if (!canCheckout) {
+      setError(
+        unavailable.length
+          ? 'بعض المنتجات في السلة غير متوفرة. ارجعي للسلة واحذفيها.'
+          : 'تعذر إتمام الطلب لأن أحد المنتجات غير متوفر',
+      );
       return;
     }
     setBusy(true);
@@ -303,14 +312,20 @@ export function CheckoutPage() {
             {area ? money(Math.max(0, subtotal - discount) + deliveryFee) : '—'}
           </strong>
         </div>
+        {unavailable.length ? (
+          <div className="stock-out-banner" style={{ gridColumn: '1 / -1' }} role="status">
+            غير متوفر
+            <span>احذفي المنتجات النافدة من السلة قبل تأكيد الطلب.</span>
+          </div>
+        ) : null}
         {error ? (
           <div className="error" style={{ gridColumn: '1 / -1' }}>
             {error}
           </div>
         ) : null}
         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 10 }}>
-          <button className="btn" type="submit" disabled={busy || !area}>
-            {busy ? 'جارٍ التأكيد...' : 'تأكيد الطلب'}
+          <button className="btn" type="submit" disabled={busy || !area || !canCheckout}>
+            {busy ? 'جارٍ التأكيد...' : loaded && !canCheckout ? 'غير متوفر — تعذر تأكيد الطلب' : 'تأكيد الطلب'}
           </button>
           <Link className="btn secondary" to="/cart">
             رجوع للسلة

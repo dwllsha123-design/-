@@ -13,7 +13,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { join } from 'path';
-import { imageUploadOptions } from '../../common/image-upload';
+import { imageUploadOptions, type UploadedImageFile } from '../../common/image-upload';
 import {
   MarketingService,
 } from './marketing.service';
@@ -107,9 +107,11 @@ export class MarketingController {
   uploadBannerImage(
     @Param('id') id: string,
     @UploadedFile()
-    file?: { filename: string; originalname: string; mimetype: string },
+    file?: UploadedImageFile,
   ) {
-    if (!file?.filename) throw new BadRequestException('اختاري صورة للرفع');
+    if (!file?.filename && !file?.path && !file?.buffer) {
+      throw new BadRequestException('اختاري صورة للرفع');
+    }
     return this.marketing.uploadBannerImage(id, file);
   }
 

@@ -712,23 +712,28 @@ img { max-width: 100%; height: auto; display: block; background: transparent; }
 }
 .product-card .thumb {
   position: relative;
-  background: transparent;
+  background: var(--surface-low);
   flex-shrink: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
 }
 .product-card .thumb-link {
   display: block;
   width: 100%;
+  height: 100%;
 }
 .product-card .thumb img {
   width: 100%;
-  height: auto;
-  object-fit: contain;
+  height: 100%;
+  object-fit: cover;
   object-position: center;
+  display: block;
   background: transparent;
 }
 .thumb-ph {
   width: 100%;
-  min-height: 160px;
+  height: 100%;
+  min-height: 0;
   display: grid;
   place-items: center;
   background: transparent;
@@ -859,6 +864,23 @@ img { max-width: 100%; height: auto; display: block; background: transparent; }
 .price .cur { font-size: 12px; font-weight: 400; color: var(--on-surface-variant); margin-inline-start: 4px; }
 .compare { color: var(--on-surface-variant); text-decoration: line-through; font-size: 12px; }
 .stock-out { color: var(--error); font-size: 13px; margin-top: 4px; }
+.stock-out-banner {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(180, 60, 60, 0.28);
+  background: rgba(180, 60, 60, 0.1);
+  color: var(--error);
+  font-weight: 800;
+  text-align: center;
+}
+.stock-out-banner span {
+  display: block;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
 .card-add {
   display: inline-flex;
   align-items: center;
@@ -880,6 +902,16 @@ img { max-width: 100%; height: auto; display: block; background: transparent; }
   background: transparent;
   color: var(--gold);
   border: 1px solid var(--copper);
+}
+.card-add.soldout,
+.btn.soldout {
+  background: var(--surface-high);
+  color: var(--on-surface-variant);
+  cursor: not-allowed;
+  border: 1px solid var(--outline-variant);
+  box-shadow: none;
+  filter: none;
+  opacity: 1;
 }
 .product-card.is-out .thumb img { opacity: .78; }
 
@@ -1012,12 +1044,17 @@ th { color: var(--on-surface-variant); font-size: 13px; }
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  background: transparent;
+  background: var(--surface-low);
+  aspect-ratio: 4 / 5;
+  width: 100%;
+  max-width: 520px;
 }
 .gallery-main img {
   width: 100%;
-  height: auto;
-  object-fit: contain;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
   background: transparent;
 }
 .gallery-main.is-unavailable img { opacity: 0.78; }
@@ -1026,15 +1063,15 @@ th { color: var(--on-surface-variant); font-size: 13px; }
   align-items: flex-start;
 }
 .gallery-thumbs button {
-  flex: 0 0 64px; width: 64px; height: auto; padding: 0;
+  flex: 0 0 64px; width: 64px; height: 80px; padding: 0;
   border: 2px solid transparent; border-radius: 10px; overflow: hidden;
   background: transparent; cursor: pointer;
 }
 .gallery-thumbs button.active { border-color: var(--primary); }
 .gallery-thumbs img {
   width: 100%;
-  height: auto;
-  object-fit: contain;
+  height: 100%;
+  object-fit: cover;
   display: block;
   background: transparent;
 }
@@ -1084,13 +1121,14 @@ th { color: var(--on-surface-variant); font-size: 13px; }
 }
 .cart-line img, .cart-line-ph, .cart-thumb {
   width: 88px;
-  height: auto;
-  object-fit: contain;
+  height: 110px;
+  object-fit: cover;
+  object-position: center;
   border-radius: 10px;
-  background: transparent;
+  background: var(--surface-low);
 }
-.cart-thumb { width: 56px; }
-.cart-line-ph { min-height: 88px; }
+.cart-thumb { width: 56px; height: 70px; }
+.cart-line-ph { min-height: 110px; }
 .cart-line .name { font-weight: 600; color: var(--on-surface); }
 .cart-line-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
 .cart-summary {

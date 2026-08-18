@@ -39,16 +39,17 @@ type PublicProduct = {
   discountPercent: number;
   currency: string;
   images: Array<{ url: string; alt?: string | null; isPrimary: boolean; color?: string | null }>;
-  variants: Array<{
-    id: string;
-    sku: string;
-    color?: string | null;
-    size?: string | null;
-    nameAr?: string | null;
-    imageUrl?: string | null;
-    retailPrice: number;
-    inStock: boolean;
-  }>;
+      variants: Array<{
+        id: string;
+        sku: string;
+        color?: string | null;
+        size?: string | null;
+        nameAr?: string | null;
+        imageUrl?: string | null;
+        retailPrice: number;
+        available: number;
+        inStock: boolean;
+      }>;
   inStock: boolean;
   createdAt: Date;
   soldCount?: number;
@@ -222,6 +223,7 @@ export class StoreService {
       description: string | null;
       brand: string | null;
       sku: string | null;
+      isTrackStock?: boolean;
       retailPrice: Prisma.Decimal | number;
       basePrice: Prisma.Decimal | number;
       currency: string;
@@ -247,10 +249,13 @@ export class StoreService {
       }>;
     },
   ): Promise<PublicProduct> {
+    const trackStock = product.isTrackStock !== false;
+    const warehouseId = await this.inventory.defaultWarehouseId();
     const variants = [];
     let anyInStock = false;
     for (const v of product.variants.filter((x) => x.isActive)) {
-      const { available } = await this.inventory.getAvailability(v.id);
+      const { available: onHand } = await this.inventory.getAvailability(v.id, warehouseId);
+      const available = trackStock ? onHand : 99;
       const inStock = available > 0;
       if (inStock) anyInStock = true;
       variants.push({
@@ -261,6 +266,7 @@ export class StoreService {
         nameAr: v.nameAr,
         imageUrl: v.imageUrl || null,
         retailPrice: Number(v.retailPrice || v.price),
+        available,
         inStock,
       });
     }
@@ -405,6 +411,29 @@ export class StoreService {
         soldCount: soldByProduct.get(p.id) || 0,
       })),
     );
+  }
+
+  async variantStock(ids: string[]) {
+    const unique = [...new Set(ids.map((id) => id.trim()).filter(Boolean))].slice(0, 60);
+    const result: Record<string, { available: number; inStock: boolean }> = {};
+    const warehouseId = unique.length ? await this.inventory.defaultWarehouseId() : '';
+    for (const id of unique) {
+      const variant = await this.prisma.productVariant.findUnique({
+        where: { id },
+        include: { product: { select: { status: true, isTrackStock: true } } },
+      });
+      if (!variant?.isActive || variant.product.status !== 'ACTIVE') {
+        result[id] = { available: 0, inStock: false };
+        continue;
+      }
+      if (variant.product.isTrackStock === false) {
+        result[id] = { available: 99, inStock: true };
+        continue;
+      }
+      const { available } = await this.inventory.getAvailability(id, warehouseId);
+      result[id] = { available, inStock: available > 0 };
+    }
+    return result;
   }
 
   async productById(id: string) {
@@ -714,14 +743,20 @@ export class StoreService {
         if (!variant || !variant.isActive || variant.product.status !== 'ACTIVE') {
           throw new NotFoundException('منتج غير متوفر');
         }
-        if (variant.product.isTrackStock) {
+        const trackStock = variant.product.isTrackStock !== false;
+        if (trackStock) {
           const { available } = await this.inventory.getAvailability(
             variant.id,
             warehouseId,
           );
-          if (available < line.quantity) {
+          if (available <= 0) {
             throw new BadRequestException(
               `غير متوفر حالياً: ${variant.product.nameAr}`,
+            );
+          }
+          if (available < line.quantity) {
+            throw new BadRequestException(
+              `الكمية المتاحة من «${variant.product.nameAr}» هي ${available} فقط`,
             );
           }
         }

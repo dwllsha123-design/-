@@ -5,7 +5,7 @@ import { useCart, useFavorites } from '../cart/CartContext';
 import { ProductGrid } from '../components/ProductCard';
 import { storeColorHex } from '../lib/colors';
 
-const FALLBACK_IMG = 'https://picsum.photos/seed/p/800/1000';
+const FALLBACK_IMG = 'https://picsum.photos/seed/p/1200/1500';
 const MAX_QTY = 10;
 
 export function ProductPage() {
@@ -78,12 +78,11 @@ export function ProductPage() {
   }
 
   function addToCart() {
-    if (!product || !variant) return;
-    if (!variant.inStock) {
+    if (!product || !variant || !variant.inStock) {
       setError('غير متوفر حالياً');
-      return;
+      return false;
     }
-    add({
+    const ok = add({
       variantId: variant.id,
       productId: product.id,
       nameAr: product.nameAr,
@@ -92,23 +91,37 @@ export function ProductPage() {
       size: variant.size,
       quantity: qty,
       unitPrice: variant.retailPrice,
+      available: variant.available,
+      inStock: true,
     });
+    if (!ok) {
+      setError('غير متوفر حالياً');
+      return false;
+    }
     setError('');
     setAdded(true);
     window.setTimeout(() => setAdded(false), 2200);
+    return true;
   }
 
   if (error && !product) return <div className="container section error">{error}</div>;
   if (!product) return <div className="container section">جارٍ التحميل...</div>;
 
   const unavailable = !variant?.inStock;
+  const maxQty = Math.max(1, Math.min(MAX_QTY, variant?.available || MAX_QTY));
 
   return (
     <section className="container section">
       <div className="product-layout">
         <div className="gallery">
           <div className={`gallery-main${unavailable ? ' is-unavailable' : ''}`}>
-            <img src={images[imageIdx]?.url || FALLBACK_IMG} alt={product.nameAr} decoding="async" />
+            <img
+              src={images[imageIdx]?.url || FALLBACK_IMG}
+              alt={product.nameAr}
+              width={1200}
+              height={1500}
+              decoding="async"
+            />
             {unavailable ? (
               <div className="unavailable-mark" aria-label="غير متوفر">
                 <span>غير متوفر</span>
@@ -125,7 +138,7 @@ export function ProductPage() {
                   onClick={() => setImageIdx(idx)}
                   aria-label={`صورة ${idx + 1}`}
                 >
-                  <img src={img.url} alt="" loading="lazy" decoding="async" />
+                  <img src={img.url} alt="" width={1200} height={1500} loading="lazy" decoding="async" />
                 </button>
               ))}
             </div>
@@ -164,12 +177,18 @@ export function ProductPage() {
                       onClick={() => {
                         const match =
                           product.variants.find(
-                            (v) => v.color === c && (!variant?.size || v.size === variant.size),
-                          ) || product.variants.find((v) => v.color === c);
+                            (v) =>
+                              v.color === c &&
+                              v.inStock &&
+                              (!variant?.size || v.size === variant.size),
+                          ) ||
+                          product.variants.find((v) => v.color === c && v.inStock) ||
+                          product.variants.find((v) => v.color === c);
                         if (match) {
                           setVariantId(match.id);
                           setQty(1);
                           setError('');
+                          setAdded(false);
                         }
                       }}
                     >
@@ -201,12 +220,20 @@ export function ProductPage() {
                       onClick={() => {
                         const match =
                           product.variants.find(
+                            (v) =>
+                              v.size === s &&
+                              v.inStock &&
+                              (!variant?.color || v.color === variant.color),
+                          ) ||
+                          product.variants.find(
                             (v) => v.size === s && (!variant?.color || v.color === variant.color),
-                          ) || product.variants.find((v) => v.size === s);
+                          ) ||
+                          product.variants.find((v) => v.size === s);
                         if (match) {
                           setVariantId(match.id);
                           setQty(1);
                           setError('');
+                          setAdded(false);
                         }
                       }}
                     >
@@ -220,7 +247,10 @@ export function ProductPage() {
           ) : null}
 
           {unavailable ? (
-            <div className="stock-out">غير متوفر حالياً — سيُتاح عند التوفير</div>
+            <div className="stock-out-banner" role="status">
+              غير متوفر
+              <span>لا يمكن الشراء أو الإضافة إلى السلة حتى يتوفر المخزون</span>
+            </div>
           ) : (
             <div>
               <div className="muted" style={{ marginBottom: 8 }}>
@@ -231,7 +261,7 @@ export function ProductPage() {
                   -
                 </button>
                 <strong>{qty}</strong>
-                <button type="button" onClick={() => setQty((q) => Math.min(MAX_QTY, q + 1))}>
+                <button type="button" onClick={() => setQty((q) => Math.min(maxQty, q + 1))}>
                   +
                 </button>
               </div>
@@ -242,20 +272,22 @@ export function ProductPage() {
           {added ? <div className="success">تمت الإضافة إلى السلة</div> : null}
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <button className="btn" type="button" disabled={unavailable} onClick={addToCart}>
-              إضافة إلى السلة
-            </button>
-            <button
-              className="btn secondary"
-              type="button"
-              disabled={unavailable}
-              onClick={() => {
-                addToCart();
-                navigate('/checkout');
-              }}
-            >
-              شراء الآن
-            </button>
+            {unavailable ? null : (
+              <>
+                <button className="btn" type="button" onClick={addToCart}>
+                  إضافة إلى السلة
+                </button>
+                <button
+                  className="btn secondary"
+                  type="button"
+                  onClick={() => {
+                    if (addToCart()) navigate('/checkout');
+                  }}
+                >
+                  شراء الآن
+                </button>
+              </>
+            )}
             <button className="btn ghost" type="button" onClick={() => fav.toggle(product.id)}>
               {fav.has(product.id) ? 'في المفضلة' : 'المفضلة'}
             </button>

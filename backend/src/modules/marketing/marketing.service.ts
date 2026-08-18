@@ -7,6 +7,8 @@ import { PromoDiscountType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { UpsertBannerDto, UpsertPromoDto, UpdateBannerDto, UpdatePromoDto } from './marketing.dto';
+import { saveUploadAsWebp, type UploadedImageFile } from '../../common/image-upload';
+import { join } from 'path';
 
 @Injectable()
 export class MarketingService {
@@ -171,21 +173,14 @@ export class MarketingService {
     return updated;
   }
 
-  async uploadBannerImage(
-    id: string,
-    file: { filename?: string; originalname: string; mimetype: string },
-  ) {
+  async uploadBannerImage(id: string, file: UploadedImageFile) {
     const banner = await this.prisma.banner.findUnique({ where: { id } });
     if (!banner) throw new NotFoundException('اللافتة غير موجودة');
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (file.mimetype && !allowed.includes(file.mimetype)) {
-      throw new BadRequestException('صيغة الصورة غير مدعومة (JPG / PNG / WEBP)');
-    }
-    if (!file.filename) throw new BadRequestException('اختاري صورة للرفع');
-    const imageUrl = `/uploads/banners/${file.filename}`;
+    const dir = join(process.cwd(), 'uploads', 'banners');
+    const saved = await saveUploadAsWebp(file, dir, '/uploads/banners');
     return this.prisma.banner.update({
       where: { id },
-      data: { imageUrl },
+      data: { imageUrl: saved.url },
     });
   }
 

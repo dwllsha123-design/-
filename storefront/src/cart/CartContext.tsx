@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { api } from '../api/client';
 
 export type CartItem = {
   variantId: string;
@@ -16,13 +17,15 @@ export type CartItem = {
   size?: string | null;
   quantity: number;
   unitPrice: number;
+  available?: number;
+  inStock?: boolean;
 };
 
 type CartCtx = {
   items: CartItem[];
   count: number;
   subtotal: number;
-  add: (item: CartItem) => void;
+  add: (item: CartItem) => boolean;
   setQty: (variantId: string, quantity: number) => void;
   remove: (variantId: string) => void;
   clear: () => void;
@@ -51,17 +54,21 @@ export function CartProvider({ children }: { children: ReactNode }) {
       count: items.reduce((s, i) => s + i.quantity, 0),
       subtotal,
       add: (item) => {
+        if (item.inStock === false) return false;
+        const max = item.available != null ? Math.max(0, item.available) : 99;
+        if (max <= 0) return false;
         setItems((prev) => {
           const existing = prev.find((p) => p.variantId === item.variantId);
           if (existing) {
+            const nextQty = Math.min(max, existing.quantity + item.quantity);
+            if (nextQty <= existing.quantity) return prev;
             return prev.map((p) =>
-              p.variantId === item.variantId
-                ? { ...p, quantity: p.quantity + item.quantity }
-                : p,
+              p.variantId === item.variantId ? { ...p, quantity: nextQty, available: max, inStock: true } : p,
             );
           }
-          return [...prev, item];
+          return [...prev, { ...item, quantity: Math.min(max, item.quantity), available: max, inStock: true }];
         });
+        return true;
       },
       setQty: (variantId, quantity) => {
         setItems((prev) =>
@@ -82,6 +89,47 @@ export function useCart() {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error('useCart outside provider');
   return ctx;
+}
+
+export type VariantStock = { available: number; inStock: boolean };
+
+export function useCartStock() {
+  const { items } = useCart();
+  const [stock, setStock] = useState<Record<string, VariantStock>>({});
+  const [loaded, setLoaded] = useState(!items.length);
+  const ids = items.map((i) => i.variantId).join(',');
+
+  useEffect(() => {
+    if (!ids) {
+      setStock({});
+      setLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    setLoaded(false);
+    api<Record<string, VariantStock>>(`/store/stock?variants=${encodeURIComponent(ids)}`)
+      .then((data) => {
+        if (!cancelled) setStock(data || {});
+      })
+      .catch(() => {
+        if (!cancelled) setStock({});
+      })
+      .finally(() => {
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ids]);
+
+  const unavailable = items.filter((i) => stock[i.variantId] && !stock[i.variantId].inStock);
+  const canCheckout =
+    loaded &&
+    items.length > 0 &&
+    unavailable.length === 0 &&
+    items.every((i) => !stock[i.variantId] || i.quantity <= stock[i.variantId].available);
+
+  return { stock, loaded, unavailable, canCheckout };
 }
 
 export function useFavorites() {

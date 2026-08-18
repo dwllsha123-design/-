@@ -4,6 +4,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -172,4 +173,11 @@ export class UpdateProductDto {
   @IsOptional()
   @IsString()
   status?: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+}
+
+export class ApplyDiscountDto {
+  @IsNumber()
+  @Min(0)
+  @Max(90)
+  percent!: number;
 }
