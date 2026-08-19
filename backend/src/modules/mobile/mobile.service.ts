@@ -103,7 +103,7 @@ export class MobileService {
         city: map['company.city'] || 'طرابلس',
         country: map['company.country'] || 'ليبيا',
         phones: [
-          map['company.phone_primary'] || '0911820999',
+          map['company.phone_primary'] || '0921820999',
           map['company.phone_secondary'] || '0924443839',
         ],
         address: map['company.address'] || 'طرابلس - ليبيا',

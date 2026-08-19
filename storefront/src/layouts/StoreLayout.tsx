@@ -172,7 +172,7 @@ export function StoreLayout() {
               )}
             </p>
             <p className="label-sm muted" style={{ margin: 0 }}>
-              طرابلس — 0911820999 · 0924443839
+              طرابلس — 0921820999 · 0924443839
             </p>
           </div>
           <nav className="drawer-nav">
@@ -206,7 +206,7 @@ export function StoreLayout() {
             <img className="footer-logo" src="/brand-logo.png" alt="دار الأنوثة" />
             <p>عنوان الأناقة والجاذبية في طرابلس. نُقدم لكِ أرقى تشكيلة من اللانجري، الملابس النسائية، الأرواب، والباروكات.</p>
             <p>التوصيل متوفر لجميع مناطق ليبيا.</p>
-            <p>للتواصل: 0911820999 · 0924443839</p>
+            <p>للتواصل: 0921820999 · 0924443839</p>
           </div>
           <div>
             <strong>تسوقي</strong>

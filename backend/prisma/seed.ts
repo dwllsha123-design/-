@@ -325,7 +325,7 @@ async function main() {
     { key: 'orders.number_prefix', value: 'ORD', group: 'orders' },
     { key: 'company.city', value: 'طرابلس', group: 'company' },
     { key: 'company.country', value: 'ليبيا', group: 'company' },
-    { key: 'company.phone_primary', value: '0911820999', group: 'company' },
+    { key: 'company.phone_primary', value: '0921820999', group: 'company' },
     { key: 'company.phone_secondary', value: '0924443839', group: 'company' },
     { key: 'company.address', value: 'طرابلس - ليبيا', group: 'company' },
     { key: 'store.delivery_fee_tripoli', value: '15', group: 'store' },

@@ -79,7 +79,7 @@ export function ForgotPasswordPage() {
         <p>
           حالياً يمكنكِ استعادة الحساب عبر التواصل مع دار الأنوثة على:
         </p>
-        <p><strong>0911820999</strong> · <strong>0924443839</strong></p>
+        <p><strong>0921820999</strong> · <strong>0924443839</strong></p>
         <p className="muted">طرابلس — ليبيا</p>
         <Link className="btn" to="/login">رجوع لتسجيل الدخول</Link>
       </div>

@@ -36,7 +36,7 @@ export function HomePage() {
           id: b.id,
           src: b.imageUrl as string,
           alt: b.title,
-          fit: b.imageFit === 'contain' ? 'contain' : 'cover',
+          fit: (b.imageFit === 'contain' ? 'contain' : 'cover') as 'cover' | 'contain',
           zoom: b.imageZoom ?? 100,
           x: b.imagePosX ?? 50,
           y: b.imagePosY ?? 50,

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, ApiUser, setToken } from '../api/client';
+import { api, ApiUser, setToken } from '@/api/client';
 
 type AuthState = {
   user: ApiUser | null;

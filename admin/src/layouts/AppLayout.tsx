@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent, type KeyboardEvent } from 'react';
 import { Link, NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
-import { isBranchUser, isDriverOnly, useAuth } from '../auth/AuthContext';
-import { api } from '../api/client';
+import { isBranchUser, isDriverOnly, useAuth } from '@/auth/AuthContext';
+import { api } from '@/api/client';
 
 type NavItem = {
   to: string;
