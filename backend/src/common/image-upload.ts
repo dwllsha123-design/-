@@ -5,7 +5,12 @@ import { join } from 'path';
 import sharp from 'sharp';
 import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 
+/** One thread — safer on 1 vCPU / 2GB VPS */
+sharp.concurrency(1);
+sharp.cache({ memory: 32, files: 20, items: 50 });
+
 const ALLOWED = /^image\/(jpeg|pjpeg|jpg|png|x-png|webp|gif|bmp|tiff|tif|avif|heic|heif)$/i;
+const MAX_INPUT_PIXELS = 40_000_000;
 
 export type UploadedImageFile = {
   filename?: string;
@@ -61,7 +66,11 @@ export async function saveUploadAsWebp(
   const fit = size?.fit ?? 'inside';
 
   try {
-    let pipeline = sharp(input, { failOn: 'none', animated: false }).rotate();
+    let pipeline = sharp(input, {
+      failOn: 'none',
+      animated: false,
+      limitInputPixels: MAX_INPUT_PIXELS,
+    }).rotate();
     if (fit === 'cover' && size?.width && size?.height) {
       pipeline = pipeline.resize(size.width, size.height, {
         fit: 'cover',
@@ -75,7 +84,8 @@ export async function saveUploadAsWebp(
         withoutEnlargement: true,
       });
     }
-    await pipeline.webp({ quality: 82, effort: 4 }).toFile(outPath);
+    // effort 3 = less CPU/RAM than default 4–6 on small VPS
+    await pipeline.webp({ quality: 80, effort: 3 }).toFile(outPath);
   } catch {
     throw new BadRequestException('تعذر تجهيز الصورة. جرّبي ملف JPG أو PNG واضحاً');
   }

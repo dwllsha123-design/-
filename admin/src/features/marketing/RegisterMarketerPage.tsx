@@ -1,7 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
-
-const API = import.meta.env.VITE_API_URL || '/api/v1';
+import { API_BASE } from '@/api/client';
 
 export function RegisterMarketerPage() {
   const [name, setName] = useState('');
@@ -16,7 +15,7 @@ export function RegisterMarketerPage() {
     setError('');
     setMsg('');
     try {
-      const res = await fetch(`${API}/users/register-marketer`, {
+      const res = await fetch(`${API_BASE}/users/register-marketer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

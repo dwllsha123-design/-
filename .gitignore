@@ -7,8 +7,8 @@ node_modules/
 .env.local
 .env.*.local
 deploy/.env
+deploy/sftp.env
 data/
-
 
 # Build / caches
 dist/
@@ -19,6 +19,7 @@ coverage/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+*.zip
 
 # Databases & local data
 *.db

@@ -1,7 +1,6 @@
-DirectoryIndex index.html
+DirectoryIndex index.html index.php
 
 <IfModule mod_rewrite.c>
-  Options -MultiViews
   RewriteEngine On
   RewriteBase /
 

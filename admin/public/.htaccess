@@ -1,7 +1,6 @@
 DirectoryIndex index.html
 
 <IfModule mod_rewrite.c>
-  Options -MultiViews
   RewriteEngine On
   RewriteBase /admin/
 

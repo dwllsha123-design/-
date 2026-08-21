@@ -1,5 +1,6 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
+import { API_BASE } from '@/api/client';
 import { detectLoginKind, homePath, useAuth } from './AuthContext';
 
 export function LoginPage() {
@@ -8,7 +9,33 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [apiWarning, setApiWarning] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE}/health`, { headers: { Accept: 'application/json' } })
+      .then(async (res) => {
+        const text = await res.text();
+        if (cancelled) return;
+        const ok = res.ok && text.trim().startsWith('{');
+        if (!ok) {
+          setApiWarning(
+            'تنبيه: الخادم (API) غير متصل حالياً. لن ينجح تسجيل الدخول حتى يُشغَّل NestJS على السيرفر ويُوجَّه /api/v1 إليه.',
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setApiWarning(
+            'تنبيه: تعذر الوصول إلى API. تحققي من تشغيل الباكند على https://daralonotha.com/api/v1',
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const kind = useMemo(() => detectLoginKind(identifier), [identifier]);
   const field = {
@@ -76,6 +103,7 @@ export function LoginPage() {
             <p>أدخل الرقم أو اسم المستخدم — سنوجهك للإدارة أو الفرع أو بوابة المندوب حسب حسابك</p>
           </div>
 
+          {apiWarning ? <div className="error">{apiWarning}</div> : null}
           {error ? <div className="error">{error}</div> : null}
 
           <div className="do-field">

@@ -1,4 +1,36 @@
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+const API_BASE = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
+
+export { API_BASE };
+
+function apiErrorMessage(text: string, status: number): string {
+  const trimmed = text.trim();
+  const looksHtml =
+    trimmed.startsWith('<!') ||
+    trimmed.startsWith('<html') ||
+    trimmed.includes('<!doctype html');
+
+  if (looksHtml) {
+    if (status === 404) {
+      return 'الخادم (API) غير متصل. مسار /api/v1 لا يوجّه إلى NestJS — تأكدي من تشغيل تطبيق Node.js على cPanel وتوجيه /api/v1 إليه.';
+    }
+    return 'تعذر قراءة رد الخادم — استُلمت صفحة HTML بدلاً من JSON. راجعي إعداد الباكند على السيرفر.';
+  }
+
+  if (!trimmed) {
+    return status >= 500 || status === 0
+      ? 'تعذر الاتصال بالخادم. تأكدي أن NestJS يعمل ثم أعيدي المحاولة.'
+      : 'رد فارغ من الخادم — تحققي من تشغيل API على /api/v1';
+  }
+
+  try {
+    const json = JSON.parse(trimmed) as { message?: string };
+    if (json.message) return json.message;
+  } catch {
+    /* fall through */
+  }
+
+  return 'تعذر قراءة رد الخادم';
+}
 
 export type ApiUser = {
   id: string;
@@ -53,15 +85,12 @@ export async function api<T>(
     try {
       json = JSON.parse(text) as ApiResponse<T> & T;
     } catch {
-      throw new Error('تعذر قراءة رد الخادم');
+      throw new Error(apiErrorMessage(text, res.status));
     }
   }
   if (!res.ok || !json) {
     const message =
-      (json as ApiResponse<T> | null)?.message ||
-      (res.status === 0 || res.status >= 500
-        ? 'تعذر الاتصال بالخادم. تأكدي أن النظام يعمل ثم أعيدي المحاولة.'
-        : 'حدث خطأ');
+      (json as ApiResponse<T> | null)?.message || apiErrorMessage(text, res.status);
     throw new Error(message);
   }
 

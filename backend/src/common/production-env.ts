@@ -6,10 +6,18 @@ export function assertProductionEnv() {
   if (!isProduction()) return;
 
   const secret = process.env.JWT_SECRET || '';
-  if (!secret || /change-me/i.test(secret) || secret.length < 32) {
+  if (
+    !secret ||
+    /change-me|REPLACE_WITH/i.test(secret) ||
+    secret.length < 32
+  ) {
     throw new Error(
       'في الإنتاج يجب تعيين JWT_SECRET عشوائي بطول 32 حرفاً على الأقل (ولا تستخدم القيمة الافتراضية).',
     );
+  }
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error('في الإنتاج يجب تعيين DATABASE_URL (مثال: file:/data/app.db).');
   }
 
   const cors = (process.env.CORS_ORIGINS || '')
