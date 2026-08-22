@@ -37,8 +37,7 @@ services:
     volumes:
       - uploads_data:/var/www/uploads
     depends_on:
-      api:
-        condition: service_healthy
+      - api
     restart: unless-stopped
     mem_limit: 64m
     memswap_limit: 64m
