@@ -12,6 +12,7 @@ services:
       DATABASE_URL: file:/data/app.db
       PORT: "3000"
       NODE_OPTIONS: --max-old-space-size=384
+      PRISMA_CLI_BINARY_TARGETS: debian-openssl-3.0.x
     volumes:
       - sqlite_data:/data
       - uploads_data:/app/uploads
